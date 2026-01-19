@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import gspread
+from google.oauth2.service_account import Credentials
 from io import BytesIO
 
 # ================= CONFIGURACIÓN =================
@@ -10,14 +12,28 @@ st.set_page_config(
 
 st.title("🔎 Buscador de Pagos y Consumo de Contratos")
 
-# ================= CARGAR ARCHIVOS =================
-archivo_pagos = r"C:\Users\ASUS\Desktop\programas y pruebas\proyecto 1\PAGOS.xlsx"
-archivo_compromisos = r"C:\Users\ASUS\Desktop\programas y pruebas\proyecto 1\compromisos cuauhtemoc 2025.XLSX"
+# ================= GOOGLE SHEETS =================
+ID_SHEET_PAGOS = "1RKjYKBPcvbxul2WgRi72DpOBwB0XZwQcFyAY9o6ldOo"
+ID_SHEET_COMP = "1RKjYKBPcvbxul2WgRi72DpOBwB0XZwQcFyAY9o6ldOo"
 
+# ================= CARGA DE DATOS =================
 @st.cache_data
 def cargar_datos():
-    df_pagos = pd.read_excel(archivo_pagos)
-    df_comp = pd.read_excel(archivo_compromisos)
+
+    scopes = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+
+    creds = Credentials.from_service_account_info(
+        st.secrets["google_service_account"],
+        scopes=scopes
+    )
+
+    client = gspread.authorize(creds)
+
+    ws_pagos = client.open_by_key(ID_SHEET_PAGOS).sheet1
+    ws_comp = client.open_by_key(ID_SHEET_COMP).sheet1
+
+    df_pagos = pd.DataFrame(ws_pagos.get_all_records())
+    df_comp = pd.DataFrame(ws_comp.get_all_records())
 
     df_pagos.columns = df_pagos.columns.str.strip()
     df_comp.columns = df_comp.columns.str.strip()
@@ -27,6 +43,7 @@ def cargar_datos():
             df_pagos[col] = ""
 
     return df_pagos, df_comp
+
 
 df, df_comp = cargar_datos()
 
@@ -58,47 +75,55 @@ def calcular_consumo(contrato):
 def convertir_excel(dataframe):
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        dataframe.to_excel(writer, index=False, sheet_name="Resultados")
+        dataframe.to_excel(writer, index=False)
     return output.getvalue()
 
 # ================= FILTROS =================
 st.subheader("🎯 Filtros de búsqueda")
 
-col1, col2, col3, col4 = st.columns(4)
+c1, c2, c3, c4 = st.columns(4)
 
-with col1:
+with c1:
     beneficiario = st.selectbox("Beneficiario", [""] + lista_beneficiarios)
-    fecha_pago = st.text_input("Fecha de pago")
 
-with col2:
+with c2:
     clc = st.text_input("CLC")
-    importe = st.text_input("Importe")
 
-with col3:
-    contrato_filtro = st.selectbox("Num. Contrato", [""] + lista_contratos)
-    oficio = st.text_input("Oficio solicitud")
+with c3:
+    contrato = st.selectbox("Num. Contrato", [""] + lista_contratos)
 
-with col4:
+with c4:
     factura = st.text_input("Factura")
 
-# ================= FILTRADO =================
 resultado = df.copy()
 
 filtros = {
     "BENEFICIARIO": beneficiario,
     "CLC": clc,
-    "Fecha de pago": fecha_pago,
-    "importe": importe,
-    "NUM_CONTRATO": contrato_filtro,
-    "OFICIO_SOLICITUD": oficio,
+    "NUM_CONTRATO": contrato,
     "FACTURA": factura
 }
 
-for columna, valor in filtros.items():
-    if valor:
+for col, val in filtros.items():
+    if val:
         resultado = resultado[
-            resultado[columna].astype(str).str.contains(valor, case=False, na=False)
+            resultado[col].astype(str).str.contains(val, case=False, na=False)
         ]
+
+# ================= CONSUMO AUTOMÁTICO =================
+st.subheader("💰 Consumo del contrato")
+
+contrato_seleccionado = contrato
+
+if not contrato_seleccionado and len(resultado) == 1:
+    contrato_seleccionado = resultado.iloc[0]["NUM_CONTRATO"]
+
+m1, m2, m3 = calcular_consumo(contrato_seleccionado)
+
+a, b, c = st.columns(3)
+a.metric("Monto del contrato", formato_pesos(m1))
+b.metric("Monto ejercido", formato_pesos(m2))
+c.metric("Monto pendiente", formato_pesos(m3))
 
 # ================= TABLA =================
 st.subheader("📋 Resultados")
@@ -115,44 +140,12 @@ tabla = resultado[[
 
 tabla["importe"] = tabla["importe"].apply(formato_pesos)
 
-# 👉 SELECCIÓN DE FILA (ESTO ES LA CLAVE)
-seleccion = st.dataframe(
-    tabla,
-    use_container_width=True,
-    height=420,
-    selection_mode="single-row",
-    on_select="rerun"
-)
+st.dataframe(tabla, use_container_width=True, height=420)
 
-# ================= DETERMINAR CONTRATO ACTIVO =================
-contrato_seleccionado = contrato_filtro
-
-if seleccion and seleccion["selection"]["rows"]:
-    fila = seleccion["selection"]["rows"][0]
-    contrato_seleccionado = str(tabla.iloc[fila]["NUM_CONTRATO"])
-
-# ================= PANEL CONSUMO =================
-st.subheader("💰 Consumo del contrato")
-
-monto_contrato, monto_ejercido, monto_pendiente = calcular_consumo(contrato_seleccionado)
-
-c1, c2, c3 = st.columns(3)
-
-c1.metric("Monto del contrato", formato_pesos(monto_contrato))
-c2.metric("Monto ejercido", formato_pesos(monto_ejercido))
-c3.metric("Monto pendiente", formato_pesos(monto_pendiente))
-
-# ================= DESCARGA EXCEL =================
+# ================= EXPORTAR =================
 st.divider()
-st.subheader("⬇️ Exportar resultados")
-
-excel = convertir_excel(tabla)
-
 st.download_button(
-    label="📥 Descargar resultados en Excel",
-    data=excel,
-    file_name="resultados_pagos_filtrados.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    "📥 Descargar resultados en Excel",
+    convertir_excel(tabla),
+    file_name="resultados_pagos.xlsx"
 )
-
-
