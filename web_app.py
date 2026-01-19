@@ -47,6 +47,9 @@ def cargar_datos():
 
 df, df_comp = cargar_datos()
 
+st.write("Columnas detectadas:")
+st.write(list(df.columns))
+
 # ================= LISTAS =================
 lista_contratos = sorted(df["NUM_CONTRATO"].dropna().astype(str).unique().tolist())
 lista_beneficiarios = sorted(df["BENEFICIARIO"].dropna().astype(str).unique().tolist())
@@ -149,3 +152,4 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
