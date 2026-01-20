@@ -71,14 +71,30 @@ def calcular_consumo(contrato):
     if not contrato:
         return 0, 0, 0
 
-    monto_contrato = df_comp[
-        df_comp["Texto cab.documento"].astype(str) == contrato
-    ]["Importe total (LC)"].sum()
+    # ===== MONTO DEL CONTRATO =====
+    if (
+        "Texto cab.documento" in df_comp.columns
+        and "Importe total (LC)" in df_comp.columns
+    ):
+        monto_contrato = (
+            df_comp[df_comp["Texto cab.documento"].astype(str) == str(contrato)]
+            ["Importe total (LC)"]
+            .apply(pd.to_numeric, errors="coerce")
+            .sum()
+        )
+    else:
+        monto_contrato = 0
 
-    monto_ejercido = (
-        df[df["NUM_CONTRATO"].astype(str) == contrato]["importe"].sum()
-        if "importe" in df.columns else 0
-    )
+    # ===== MONTO EJERCIDO =====
+    if "NUM_CONTRATO" in df.columns and "importe" in df.columns:
+        monto_ejercido = (
+            df[df["NUM_CONTRATO"].astype(str) == str(contrato)]
+            ["importe"]
+            .apply(pd.to_numeric, errors="coerce")
+            .sum()
+        )
+    else:
+        monto_ejercido = 0
 
     return monto_contrato, monto_ejercido, monto_contrato - monto_ejercido
 
@@ -162,7 +178,7 @@ columnas = [
     "CLC",
     "importe",
     "FACTURA",
-    "FECHA_PAGO"   # ✅ COLUMNA AGREGADA
+    "FECHA_PAGO"
 ]
 
 tabla = resultado[[c for c in columnas if c in resultado.columns]].copy()
@@ -184,6 +200,7 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
 
