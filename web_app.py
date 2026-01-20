@@ -48,15 +48,10 @@ def cargar_datos():
 
 df, df_comp = cargar_datos()
 
-# ================= LISTAS =================
+# ================= LISTAS BASE =================
 lista_beneficiarios = (
     sorted(df["BENEFICIARIO"].dropna().astype(str).unique())
     if "BENEFICIARIO" in df.columns else []
-)
-
-lista_contratos = (
-    sorted(df["NUM_CONTRATO"].dropna().astype(str).unique())
-    if "NUM_CONTRATO" in df.columns else []
 )
 
 # ================= FUNCIONES =================
@@ -71,30 +66,24 @@ def calcular_consumo(contrato):
     if not contrato:
         return 0, 0, 0
 
-    # ===== MONTO DEL CONTRATO =====
-    if (
-        "Texto cab.documento" in df_comp.columns
+    monto_contrato = (
+        df_comp[df_comp["Texto cab.documento"].astype(str) == str(contrato)]
+        ["Importe total (LC)"]
+        .apply(pd.to_numeric, errors="coerce")
+        .sum()
+        if "Texto cab.documento" in df_comp.columns
         and "Importe total (LC)" in df_comp.columns
-    ):
-        monto_contrato = (
-            df_comp[df_comp["Texto cab.documento"].astype(str) == str(contrato)]
-            ["Importe total (LC)"]
-            .apply(pd.to_numeric, errors="coerce")
-            .sum()
-        )
-    else:
-        monto_contrato = 0
+        else 0
+    )
 
-    # ===== MONTO EJERCIDO =====
-    if "NUM_CONTRATO" in df.columns and "importe" in df.columns:
-        monto_ejercido = (
-            df[df["NUM_CONTRATO"].astype(str) == str(contrato)]
-            ["importe"]
-            .apply(pd.to_numeric, errors="coerce")
-            .sum()
-        )
-    else:
-        monto_ejercido = 0
+    monto_ejercido = (
+        df[df["NUM_CONTRATO"].astype(str) == str(contrato)]
+        ["importe"]
+        .apply(pd.to_numeric, errors="coerce")
+        .sum()
+        if "NUM_CONTRATO" in df.columns and "importe" in df.columns
+        else 0
+    )
 
     return monto_contrato, monto_ejercido, monto_contrato - monto_ejercido
 
@@ -110,6 +99,7 @@ st.subheader("Filtros")
 
 c1, c2, c3, c4, c5 = st.columns([2, 2, 2, 2, 1])
 
+# ---- BENEFICIARIO ----
 with c1:
     st.session_state.beneficiario = st.selectbox(
         "Beneficiario",
@@ -118,20 +108,41 @@ with c1:
         if st.session_state.beneficiario in lista_beneficiarios else 0
     )
 
+# ---- CONTRATOS DEPENDIENTES DEL BENEFICIARIO ----
+if st.session_state.beneficiario:
+    contratos_filtrados = (
+        df[df["BENEFICIARIO"] == st.session_state.beneficiario]["NUM_CONTRATO"]
+        .dropna()
+        .astype(str)
+        .unique()
+        .tolist()
+    )
+else:
+    contratos_filtrados = (
+        df["NUM_CONTRATO"].dropna().astype(str).unique().tolist()
+        if "NUM_CONTRATO" in df.columns else []
+    )
+
+contratos_filtrados = sorted(contratos_filtrados)
+
+# ---- CLC ----
 with c2:
     st.session_state.clc = st.text_input("CLC", st.session_state.clc)
 
+# ---- SELECT CONTRATO ----
 with c3:
     st.session_state.contrato = st.selectbox(
         "Num. Contrato",
-        [""] + lista_contratos,
-        index=([""] + lista_contratos).index(st.session_state.contrato)
-        if st.session_state.contrato in lista_contratos else 0
+        [""] + contratos_filtrados,
+        index=([""] + contratos_filtrados).index(st.session_state.contrato)
+        if st.session_state.contrato in contratos_filtrados else 0
     )
 
+# ---- FACTURA ----
 with c4:
     st.session_state.factura = st.text_input("Factura", st.session_state.factura)
 
+# ---- LIMPIAR ----
 with c5:
     if st.button("Limpiar Busquedas"):
         for k in ["beneficiario", "clc", "contrato", "factura"]:
@@ -141,27 +152,27 @@ with c5:
 # ================= FILTRADO =================
 resultado = df.copy()
 
-filtros = {
-    "BENEFICIARIO": st.session_state.beneficiario,
-    "CLC": st.session_state.clc,
-    "NUM_CONTRATO": st.session_state.contrato,
-    "FACTURA": st.session_state.factura
-}
+# ⚠️ Regla: si beneficiario tiene MÁS DE UN contrato y NO se elige contrato → no mostrar resultados
+if st.session_state.beneficiario and len(contratos_filtrados) > 1 and not st.session_state.contrato:
+    resultado = resultado.iloc[0:0]
+else:
+    filtros = {
+        "BENEFICIARIO": st.session_state.beneficiario,
+        "CLC": st.session_state.clc,
+        "NUM_CONTRATO": st.session_state.contrato,
+        "FACTURA": st.session_state.factura
+    }
 
-for col, val in filtros.items():
-    if val and col in resultado.columns:
-        resultado = resultado[
-            resultado[col].astype(str).str.contains(val, case=False, na=False)
-        ]
+    for col, val in filtros.items():
+        if val and col in resultado.columns:
+            resultado = resultado[
+                resultado[col].astype(str).str.contains(val, case=False, na=False)
+            ]
 
 # ================= CONSUMO =================
 st.subheader("Consumo del contrato")
 
-contrato_sel = st.session_state.contrato
-if not contrato_sel and "NUM_CONTRATO" in resultado.columns and len(resultado) == 1:
-    contrato_sel = resultado.iloc[0]["NUM_CONTRATO"]
-
-m1, m2, m3 = calcular_consumo(contrato_sel)
+m1, m2, m3 = calcular_consumo(st.session_state.contrato)
 
 a, b, c = st.columns(3)
 a.metric("Monto del contrato", formato_pesos(m1))
@@ -200,14 +211,3 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
-
-
-
-
-
-
-
-
-
-
-
