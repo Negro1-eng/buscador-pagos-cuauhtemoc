@@ -156,7 +156,7 @@ b.metric("Monto ejercido", formato_pesos(m2))
 c.metric("Monto pendiente", formato_pesos(m3))
 
 # ================= TABLA =================
-st.subheader(" Resuktados")
+st.subheader(" Tabla de Resultados")
 
 columnas = [
     "BENEFICIARIO",
@@ -182,6 +182,7 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
 
