@@ -38,18 +38,27 @@ def cargar_datos():
     df_pagos.columns = df_pagos.columns.str.strip()
     df_comp.columns = df_comp.columns.str.strip()
 
-    for col in ["NUM_CONTRATO", "OFICIO_SOLICITUD", "FACTURA"]:
-        if col not in df_pagos.columns:
-            df_pagos[col] = ""
-
     return df_pagos, df_comp
 
 
 df, df_comp = cargar_datos()
 
-# ================= LISTAS =================
-lista_contratos = sorted(df["NUM_CONTRATO"].dropna().astype(str).unique().tolist())
-lista_beneficiarios = sorted(df["BENEFICIARIO"].dropna().astype(str).unique().tolist())
+# ================= LISTAS SEGURAS =================
+def col_segura(df, nombre):
+    return nombre if nombre in df.columns else None
+
+col_benef = col_segura(df, "BENEFICIARIO")
+col_contrato = col_segura(df, "NUM_CONTRATO")
+
+lista_beneficiarios = (
+    sorted(df[col_benef].dropna().astype(str).unique())
+    if col_benef else []
+)
+
+lista_contratos = (
+    sorted(df[col_contrato].dropna().astype(str).unique())
+    if col_contrato else []
+)
 
 # ================= FUNCIONES =================
 def formato_pesos(valor):
@@ -67,9 +76,10 @@ def calcular_consumo(contrato):
         df_comp["Texto cab.documento"].astype(str) == contrato
     ]["Importe total (LC)"].sum()
 
-    monto_ejercido = df[
-        df["NUM_CONTRATO"].astype(str) == contrato
-    ]["importe"].sum()
+    monto_ejercido = (
+        df[df["NUM_CONTRATO"].astype(str) == contrato]["importe"].sum()
+        if "importe" in df.columns else 0
+    )
 
     return monto_contrato, monto_ejercido, monto_contrato - monto_ejercido
 
@@ -97,7 +107,6 @@ with c3:
 with c4:
     factura = st.text_input("Factura")
 
-# ================= FILTRADO =================
 resultado = df.copy()
 
 filtros = {
@@ -108,30 +117,29 @@ filtros = {
 }
 
 for col, val in filtros.items():
-    if val:
+    if val and col in resultado.columns:
         resultado = resultado[
             resultado[col].astype(str).str.contains(val, case=False, na=False)
         ]
 
-# ================= CONSUMO AUTOMÁTICO =================
+# ================= CONSUMO =================
 st.subheader("💰 Consumo del contrato")
 
-contrato_seleccionado = contrato
+contrato_sel = contrato
+if not contrato_sel and "NUM_CONTRATO" in resultado.columns and len(resultado) == 1:
+    contrato_sel = resultado.iloc[0]["NUM_CONTRATO"]
 
-if not contrato_seleccionado and len(resultado) == 1:
-    contrato_seleccionado = resultado.iloc[0]["NUM_CONTRATO"]
-
-m1, m2, m3 = calcular_consumo(contrato_seleccionado)
+m1, m2, m3 = calcular_consumo(contrato_sel)
 
 a, b, c = st.columns(3)
 a.metric("Monto del contrato", formato_pesos(m1))
 b.metric("Monto ejercido", formato_pesos(m2))
 c.metric("Monto pendiente", formato_pesos(m3))
 
-# ================= TABLA =================
+# ================= TABLA SEGURA =================
 st.subheader("📋 Resultados")
 
-tabla = resultado[[
+columnas_deseadas = [
     "BENEFICIARIO",
     "NUM_CONTRATO",
     "OFICIO_SOLICITUD",
@@ -139,9 +147,14 @@ tabla = resultado[[
     "importe",
     "FACTURA",
     "Fecha de pago"
-]].copy()
+]
 
-tabla["importe"] = tabla["importe"].apply(formato_pesos)
+columnas_existentes = [c for c in columnas_deseadas if c in resultado.columns]
+
+tabla = resultado[columnas_existentes].copy()
+
+if "importe" in tabla.columns:
+    tabla["importe"] = tabla["importe"].apply(formato_pesos)
 
 st.dataframe(tabla, use_container_width=True, height=420)
 
@@ -152,6 +165,7 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
 
