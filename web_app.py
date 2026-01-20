@@ -13,8 +13,7 @@ st.set_page_config(
 st.title("🔎 Buscador de Pagos y Consumo de Contratos")
 
 # ================= GOOGLE SHEETS =================
-ID_SHEET_PAGOS = "1RKjYKBPcvbxul2WgRi72DpOBwB0XZwQcFyAY9o6ldOo"
-ID_SHEET_COMP = "1RKjYKBPcvbxul2WgRi72DpOBwB0XZwQcFyAY9o6ldOo"
+ID_SHEET = "1RKjYKBPcvbxul2WgRi72DpOBwB0XZwQcFyAY9o6ldOo"
 
 # ================= CARGA DE DATOS =================
 @st.cache_data
@@ -28,11 +27,10 @@ def cargar_datos():
     )
 
     client = gspread.authorize(creds)
+    sh = client.open_by_key(ID_SHEET)
 
-    sh = client.open_by_key(ID_SHEET_PAGOS)
-
-ws_pagos = sh.worksheet("PAGOS")
-ws_comp = sh.worksheet("COMPROMISOS")
+    ws_pagos = sh.worksheet("PAGOS")
+    ws_comp = sh.worksheet("COMPROMISOS")
 
     df_pagos = pd.DataFrame(ws_pagos.get_all_records())
     df_comp = pd.DataFrame(ws_comp.get_all_records())
@@ -49,10 +47,6 @@ ws_comp = sh.worksheet("COMPROMISOS")
 
 df, df_comp = cargar_datos()
 
-st.write("Columnas PAGOS:", df.columns.tolist())
-st.write("Columnas COMPROMISOS:", df_comp.columns.tolist())
-
-
 # ================= LISTAS =================
 lista_contratos = sorted(df["NUM_CONTRATO"].dropna().astype(str).unique().tolist())
 lista_beneficiarios = sorted(df["BENEFICIARIO"].dropna().astype(str).unique().tolist())
@@ -63,6 +57,7 @@ def formato_pesos(valor):
         return f"$ {float(valor):,.2f}"
     except:
         return "$ 0.00"
+
 
 def calcular_consumo(contrato):
     if not contrato:
@@ -77,6 +72,7 @@ def calcular_consumo(contrato):
     ]["importe"].sum()
 
     return monto_contrato, monto_ejercido, monto_contrato - monto_ejercido
+
 
 def convertir_excel(dataframe):
     output = BytesIO()
@@ -101,6 +97,7 @@ with c3:
 with c4:
     factura = st.text_input("Factura")
 
+# ================= FILTRADO =================
 resultado = df.copy()
 
 filtros = {
@@ -155,6 +152,8 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
+
 
 
 
