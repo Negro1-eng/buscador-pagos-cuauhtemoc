@@ -49,9 +49,6 @@ def cargar_datos():
 df, df_comp = cargar_datos()
 
 # ================= LISTAS =================
-def col_segura(df, nombre):
-    return nombre if nombre in df.columns else None
-
 lista_beneficiarios = (
     sorted(df["BENEFICIARIO"].dropna().astype(str).unique())
     if "BENEFICIARIO" in df.columns else []
@@ -165,10 +162,15 @@ columnas = [
     "CLC",
     "importe",
     "FACTURA",
-    "Fecha de pago"
+    "FECHA_PAGO"   # ✅ COLUMNA AGREGADA
 ]
 
 tabla = resultado[[c for c in columnas if c in resultado.columns]].copy()
+
+if "FECHA_PAGO" in tabla.columns:
+    tabla["FECHA_PAGO"] = pd.to_datetime(
+        tabla["FECHA_PAGO"], errors="coerce"
+    ).dt.strftime("%d/%m/%Y")
 
 if "importe" in tabla.columns:
     tabla["importe"] = tabla["importe"].apply(formato_pesos)
@@ -182,6 +184,8 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
+
 
 
 
