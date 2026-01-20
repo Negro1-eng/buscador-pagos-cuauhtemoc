@@ -29,8 +29,10 @@ def cargar_datos():
 
     client = gspread.authorize(creds)
 
-    ws_pagos = client.open_by_key(ID_SHEET_PAGOS).sheet1
-    ws_comp = client.open_by_key(ID_SHEET_COMP).sheet1
+    sh = client.open_by_key(ID_SHEET_PAGOS)
+
+ws_pagos = sh.worksheet("PAGOS")
+ws_comp = sh.worksheet("COMPROMISOS")
 
     df_pagos = pd.DataFrame(ws_pagos.get_all_records())
     df_comp = pd.DataFrame(ws_comp.get_all_records())
@@ -47,8 +49,9 @@ def cargar_datos():
 
 df, df_comp = cargar_datos()
 
-st.write("Columnas detectadas:")
-st.write(list(df.columns))
+st.write("Columnas PAGOS:", df.columns.tolist())
+st.write("Columnas COMPROMISOS:", df_comp.columns.tolist())
+
 
 # ================= LISTAS =================
 lista_contratos = sorted(df["NUM_CONTRATO"].dropna().astype(str).unique().tolist())
@@ -152,6 +155,7 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
 
