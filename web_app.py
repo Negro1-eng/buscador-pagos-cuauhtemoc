@@ -10,7 +10,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🔎 Buscador de Pagos y Consumo de Contratos")
+st.title(" Buscador de Pagos y Consumo de Contratos")
 
 # ================= ESTADO =================
 for key in ["beneficiario", "clc", "contrato", "factura"]:
@@ -93,7 +93,7 @@ def convertir_excel(dataframe):
     return output.getvalue()
 
 # ================= FILTROS =================
-st.subheader("🎯 Filtros de búsqueda")
+st.subheader("Filtros")
 
 c1, c2, c3, c4, c5 = st.columns([2, 2, 2, 2, 1])
 
@@ -120,7 +120,7 @@ with c4:
     st.session_state.factura = st.text_input("Factura", st.session_state.factura)
 
 with c5:
-    if st.button("🧹 Limpiar"):
+    if st.button("Limpiar Busquedas"):
         for k in ["beneficiario", "clc", "contrato", "factura"]:
             st.session_state[k] = ""
         st.rerun()
@@ -142,7 +142,7 @@ for col, val in filtros.items():
         ]
 
 # ================= CONSUMO =================
-st.subheader("💰 Consumo del contrato")
+st.subheader("Consumo del contrato")
 
 contrato_sel = st.session_state.contrato
 if not contrato_sel and "NUM_CONTRATO" in resultado.columns and len(resultado) == 1:
@@ -156,7 +156,7 @@ b.metric("Monto ejercido", formato_pesos(m2))
 c.metric("Monto pendiente", formato_pesos(m3))
 
 # ================= TABLA =================
-st.subheader("📋 Resultados")
+st.subheader(" Resuktados")
 
 columnas = [
     "BENEFICIARIO",
@@ -178,10 +178,11 @@ st.dataframe(tabla, use_container_width=True, height=420)
 # ================= EXPORTAR =================
 st.divider()
 st.download_button(
-    "📥 Descargar resultados en Excel",
+    "Descargar resultados en Excel",
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
 
