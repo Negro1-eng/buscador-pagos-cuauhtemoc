@@ -12,6 +12,11 @@ st.set_page_config(
 
 st.title("🔎 Buscador de Pagos y Consumo de Contratos")
 
+# ================= ESTADO =================
+for key in ["beneficiario", "clc", "contrato", "factura"]:
+    if key not in st.session_state:
+        st.session_state[key] = ""
+
 # ================= GOOGLE SHEETS =================
 ID_SHEET = "1RKjYKBPcvbxul2WgRi72DpOBwB0XZwQcFyAY9o6ldOo"
 
@@ -43,21 +48,18 @@ def cargar_datos():
 
 df, df_comp = cargar_datos()
 
-# ================= LISTAS SEGURAS =================
+# ================= LISTAS =================
 def col_segura(df, nombre):
     return nombre if nombre in df.columns else None
 
-col_benef = col_segura(df, "BENEFICIARIO")
-col_contrato = col_segura(df, "NUM_CONTRATO")
-
 lista_beneficiarios = (
-    sorted(df[col_benef].dropna().astype(str).unique())
-    if col_benef else []
+    sorted(df["BENEFICIARIO"].dropna().astype(str).unique())
+    if "BENEFICIARIO" in df.columns else []
 )
 
 lista_contratos = (
-    sorted(df[col_contrato].dropna().astype(str).unique())
-    if col_contrato else []
+    sorted(df["NUM_CONTRATO"].dropna().astype(str).unique())
+    if "NUM_CONTRATO" in df.columns else []
 )
 
 # ================= FUNCIONES =================
@@ -93,27 +95,44 @@ def convertir_excel(dataframe):
 # ================= FILTROS =================
 st.subheader("🎯 Filtros de búsqueda")
 
-c1, c2, c3, c4 = st.columns(4)
+c1, c2, c3, c4, c5 = st.columns([2, 2, 2, 2, 1])
 
 with c1:
-    beneficiario = st.selectbox("Beneficiario", [""] + lista_beneficiarios)
+    st.session_state.beneficiario = st.selectbox(
+        "Beneficiario",
+        [""] + lista_beneficiarios,
+        index=([""] + lista_beneficiarios).index(st.session_state.beneficiario)
+        if st.session_state.beneficiario in lista_beneficiarios else 0
+    )
 
 with c2:
-    clc = st.text_input("CLC")
+    st.session_state.clc = st.text_input("CLC", st.session_state.clc)
 
 with c3:
-    contrato = st.selectbox("Num. Contrato", [""] + lista_contratos)
+    st.session_state.contrato = st.selectbox(
+        "Num. Contrato",
+        [""] + lista_contratos,
+        index=([""] + lista_contratos).index(st.session_state.contrato)
+        if st.session_state.contrato in lista_contratos else 0
+    )
 
 with c4:
-    factura = st.text_input("Factura")
+    st.session_state.factura = st.text_input("Factura", st.session_state.factura)
 
+with c5:
+    if st.button("🧹 Limpiar"):
+        for k in ["beneficiario", "clc", "contrato", "factura"]:
+            st.session_state[k] = ""
+        st.rerun()
+
+# ================= FILTRADO =================
 resultado = df.copy()
 
 filtros = {
-    "BENEFICIARIO": beneficiario,
-    "CLC": clc,
-    "NUM_CONTRATO": contrato,
-    "FACTURA": factura
+    "BENEFICIARIO": st.session_state.beneficiario,
+    "CLC": st.session_state.clc,
+    "NUM_CONTRATO": st.session_state.contrato,
+    "FACTURA": st.session_state.factura
 }
 
 for col, val in filtros.items():
@@ -125,7 +144,7 @@ for col, val in filtros.items():
 # ================= CONSUMO =================
 st.subheader("💰 Consumo del contrato")
 
-contrato_sel = contrato
+contrato_sel = st.session_state.contrato
 if not contrato_sel and "NUM_CONTRATO" in resultado.columns and len(resultado) == 1:
     contrato_sel = resultado.iloc[0]["NUM_CONTRATO"]
 
@@ -136,10 +155,10 @@ a.metric("Monto del contrato", formato_pesos(m1))
 b.metric("Monto ejercido", formato_pesos(m2))
 c.metric("Monto pendiente", formato_pesos(m3))
 
-# ================= TABLA SEGURA =================
+# ================= TABLA =================
 st.subheader("📋 Resultados")
 
-columnas_deseadas = [
+columnas = [
     "BENEFICIARIO",
     "NUM_CONTRATO",
     "OFICIO_SOLICITUD",
@@ -149,9 +168,7 @@ columnas_deseadas = [
     "Fecha de pago"
 ]
 
-columnas_existentes = [c for c in columnas_deseadas if c in resultado.columns]
-
-tabla = resultado[columnas_existentes].copy()
+tabla = resultado[[c for c in columnas if c in resultado.columns]].copy()
 
 if "importe" in tabla.columns:
     tabla["importe"] = tabla["importe"].apply(formato_pesos)
@@ -165,6 +182,8 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
+
 
 
 
