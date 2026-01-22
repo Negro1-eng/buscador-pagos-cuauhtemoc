@@ -30,7 +30,7 @@ with c2:
 
 with c3:
     st.image(
-        "LOGO CDMX.png",
+        "LOGO CDMX.jpg",
         width=110
     )
 
@@ -250,6 +250,7 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
 
