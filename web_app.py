@@ -12,6 +12,15 @@ st.set_page_config(
 
 st.title(" Buscador de Pagos y Consumo de Contratos")
 
+# ================= ACTUALIZAR DATOS =================
+col1, col2 = st.columns([1, 6])
+
+with col1:
+    if st.button("Actualizar datos"):
+        st.cache_data.clear()
+        st.success("Datos actualizados desde Google Sheets")
+        st.rerun()
+
 # ================= ESTADO =================
 for key in ["beneficiario", "clc", "contrato", "factura"]:
     if key not in st.session_state:
@@ -211,3 +220,4 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
