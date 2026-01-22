@@ -18,8 +18,7 @@ with c2:
         """
         <div style="padding-top:10px">
             <h2 style="margin-bottom:0">Alcaldía Cuauhtémoc</h2>
-            <span style="font-size:16px;color:#555">
-                Secretaría de Obras y Servicios
+            <span style="font-size:19px;color:#555">
             </span>
         </div>
         """,
@@ -242,6 +241,7 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
 
