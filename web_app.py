@@ -5,32 +5,13 @@ from google.oauth2.service_account import Credentials
 from io import BytesIO
 
 # ================= ENCABEZADO =================
-c1, c2, c3 = st.columns([1, 5, 1])
+c1, c2, c3 = st.columns([1, 6, 1])
 
 with c1:
-    st.image("LOGO CDMX.png", width=100)
-
-with c2:
-    st.markdown(
-        "<h2 style='text-align: center;'> Consumo de Contratos</h2>",
-        unsafe_allow_html=True
-    )
+    st.image("assets/logo_cdmx.png", width=100)
 
 with c3:
-    st.image("LOGO CUAUHTEMOC.png", width=100)
-
-
-
-
-
-
-
-
-
-
-
-
-
+    st.image("assets/logo_cuauhtemoc.png", width=100)
 
 # ================= CONFIGURACIÓN =================
 st.set_page_config(
@@ -248,6 +229,7 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
 
