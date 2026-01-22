@@ -3,15 +3,27 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 from io import BytesIO
-
 # ================= ENCABEZADO =================
-c1, c2, c3 = st.columns([1, 6, 1])
+c1, c2 = st.columns([1, 6])
 
 with c1:
-    st.image("assets/logo_cdmx.png", width=100)
+    st.image(
+        "LOGO CUAUHTEMOC.png",
+        width=110
+    )
 
-with c3:
-    st.image("assets/logo_cuauhtemoc.png", width=100)
+with c2:
+    st.markdown(
+        """
+        <div style="padding-top:10px">
+            <h2 style="margin-bottom:0">Alcaldía Cuauhtémoc</h2>
+            <span style="font-size:16px;color:#555">
+                Secretaría de Obras y Servicios
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 # ================= CONFIGURACIÓN =================
 st.set_page_config(
@@ -229,6 +241,7 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
 
