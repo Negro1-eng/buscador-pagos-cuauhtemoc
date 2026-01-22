@@ -11,7 +11,7 @@ c1, c2, c3 = st.columns(
 
 with c1:
     st.image(
-        "LOGO CUAUHTEMOC.png",
+        "LOGO CDMX.jpg",
         width=110
     )
 
@@ -20,8 +20,7 @@ with c2:
         """
         <div style="text-align:center">
             <h2 style="margin-bottom:0">Alcaldía Cuauhtémoc</h2>
-            <span style="font-size:16px;color:#555">
-                Secretaría de Obras y Servicios
+            <span style="font-size:10px;color:#555">
             </span>
         </div>
         """,
@@ -30,7 +29,7 @@ with c2:
 
 with c3:
     st.image(
-        "LOGO CDMX.jpg",
+        "LOGO CUAUTEMOC.png",
         width=110
     )
 
@@ -250,6 +249,7 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
 
