@@ -9,7 +9,7 @@ c1, c2 = st.columns([1, 6])
 
 with c1:
     st.image(
-        "assets/LOGO CUAUHTEMOC.png",
+        "LOGO CUAUHTEMOC.png",
         width=110
     )
 
@@ -242,5 +242,6 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
