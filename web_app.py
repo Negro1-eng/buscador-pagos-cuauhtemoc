@@ -29,7 +29,7 @@ with c2:
 
 with c3:
     st.image(
-        "LOGO CUAUTEMOC.PNG",
+        "LOGO CUAUHTEMOC.png",
         width=110
     )
 
@@ -249,6 +249,7 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
 
