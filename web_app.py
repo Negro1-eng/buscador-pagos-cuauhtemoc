@@ -4,6 +4,28 @@ import gspread
 from google.oauth2.service_account import Credentials
 from io import BytesIO
 
+# ================= ENCABEZADO =================
+c1, c2 = st.columns([1, 6])
+
+with c1:
+    st.image(
+        "assets/LOGO CUAUHTEMOC.png",
+        width=110
+    )
+
+with c2:
+    st.markdown(
+        """
+        <div style="padding-top:10px">
+            <h2 style="margin-bottom:0">Alcaldía Cuauhtémoc</h2>
+            <span style="font-size:16px;color:#555">
+                Secretaría de Obras y Servicios
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
 # ================= CONFIGURACIÓN =================
 st.set_page_config(
     page_title="Buscador de Pagos y Consumo de Contratos",
@@ -220,4 +242,5 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
