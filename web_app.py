@@ -4,18 +4,21 @@ import gspread
 from google.oauth2.service_account import Credentials
 from io import BytesIO
 # ================= ENCABEZADO =================
-c1, c2, c3 = st.columns([1, 6, 1])
+c1, c2, c3 = st.columns(
+    [1, 6, 1],
+    vertical_alignment="center"
+)
 
 with c1:
     st.image(
-        "LOGO CDMX.jpg",
+        "LOGO CUAUHTEMOC.png",
         width=110
     )
 
 with c2:
     st.markdown(
         """
-        <div style="padding-top:10px; text-align:center">
+        <div style="text-align:center">
             <h2 style="margin-bottom:0">Alcaldía Cuauhtémoc</h2>
             <span style="font-size:16px;color:#555">
                 Secretaría de Obras y Servicios
@@ -27,7 +30,7 @@ with c2:
 
 with c3:
     st.image(
-        "LOGO CUAUHTEMOC.png",
+        "LOGO CDMX.png",
         width=110
     )
 
@@ -247,6 +250,7 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
 
