@@ -186,7 +186,7 @@ st.markdown("---")
 col_t1, col_t2 = st.columns([4, 1])
 
 with col_t1:
-    st.markdown("### 🔢 Total de pagos encontrados")
+    st.markdown("###  MONTO TOTAL DE PAGOS ENCONTRADOS")
 
 with col_t2:
     st.metric(
@@ -212,6 +212,7 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
 
