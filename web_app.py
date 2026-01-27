@@ -242,6 +242,25 @@ if "importe" in tabla.columns:
 
 st.dataframe(tabla, use_container_width=True, height=420)
 
+# ================= TOTAL DE IMPORTE =================
+if "importe" in resultado.columns:
+    total_importe = (
+        resultado["importe"]
+        .apply(lambda x: str(x).replace("$", "").replace(",", ""))
+        .apply(pd.to_numeric, errors="coerce")
+        .sum()
+    )
+
+    fila_total = {col: "" for col in tabla.columns}
+    fila_total["BENEFICIARIO"] = "TOTAL"
+    fila_total["importe"] = formato_pesos(total_importe)
+
+    tabla = pd.concat(
+        [tabla, pd.DataFrame([fila_total])],
+        ignore_index=True
+    )
+
+
 # ================= EXPORTAR =================
 st.divider()
 st.download_button(
@@ -249,6 +268,7 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
 
