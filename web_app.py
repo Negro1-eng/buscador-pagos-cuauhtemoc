@@ -181,11 +181,25 @@ if "FECHA_PAGO" in tabla:
 total_importe = tabla["importe"].apply(pd.to_numeric, errors="coerce").sum()
 tabla["importe"] = tabla["importe"].apply(formato_pesos)
 
-fila_total = {c: "" for c in tabla.columns}
-fila_total["BENEFICIARIO"] = "TOTAL"
-fila_total["importe"] = f"**{formato_pesos(total_importe)}**"
+st.markdown("---")
 
-tabla = pd.concat([tabla, pd.DataFrame([fila_total])], ignore_index=True)
+col_t1, col_t2 = st.columns([4, 1])
+
+with col_t1:
+    st.markdown("### 🔢 Total de pagos encontrados")
+
+with col_t2:
+    st.metric(
+        label="",
+        value=formato_pesos(total_importe)
+    )
+
+
+#fila_total = {c: "" for c in tabla.columns}
+#fila_total["BENEFICIARIO"] = "TOTAL"
+#fila_total["importe"] = f"**{formato_pesos(total_importe)}**"
+
+#tabla = pd.concat([tabla, pd.DataFrame([fila_total])], ignore_index=True)
 
 alto_tabla = min(420, (len(tabla) + 1) * 35)
 
@@ -198,6 +212,7 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
 
