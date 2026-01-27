@@ -240,8 +240,6 @@ if "FECHA_PAGO" in tabla.columns:
 if "importe" in tabla.columns:
     tabla["importe"] = tabla["importe"].apply(formato_pesos)
 
-st.dataframe(tabla, use_container_width=True, height=420)
-
 # ================= TOTAL DE IMPORTE =================
 if "importe" in resultado.columns:
     total_importe = (
@@ -259,7 +257,7 @@ if "importe" in resultado.columns:
         [tabla, pd.DataFrame([fila_total])],
         ignore_index=True
     )
-
+st.dataframe(tabla, use_container_width=True, height=420)
 
 # ================= EXPORTAR =================
 st.divider()
@@ -268,6 +266,7 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
 
