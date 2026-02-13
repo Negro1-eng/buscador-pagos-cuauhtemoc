@@ -4,6 +4,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from io import BytesIO
+import re
 
 # ================= ENCABEZADO =================
 c1, c2, c3 = st.columns([1, 6, 1], vertical_alignment="center")
@@ -69,7 +70,16 @@ def cargar_datos():
 
 df, df_comp = cargar_datos()
 
-# ================= DRIVE PDFs COMPROBACION =================
+# ================= NORMALIZADOR =================
+def normalizar_nombre(texto):
+    if not texto:
+        return ""
+    texto = str(texto).upper()
+    texto = texto.replace(".PDF", "")
+    texto = re.sub(r"\s+", "", texto)
+    return texto.strip()
+
+# ================= DRIVE PDFs =================
 ID_CARPETA_COMPROBACION = "1S7pA80opb45sSeiYy3asOLP4EeF86xbD"
 
 @st.cache_data
@@ -94,9 +104,9 @@ def obtener_pdfs_drive():
         ).execute()
 
         for file in response.get("files", []):
-            nombre = file["name"].strip().upper()
+            nombre_normalizado = normalizar_nombre(file["name"])
             link = f"https://drive.google.com/file/d/{file['id']}/view"
-            pdfs[nombre] = link
+            pdfs[nombre_normalizado] = link
 
         page_token = response.get("nextPageToken", None)
         if page_token is None:
@@ -225,9 +235,11 @@ if "FECHA_PAGO" in tabla:
 total_importe = tabla["importe"].apply(pd.to_numeric, errors="coerce").sum()
 tabla["importe"] = tabla["importe"].apply(formato_pesos)
 
-# ================= VINCULAR PDF =================
+# ================= VINCULAR PDF INTELIGENTE =================
 if "COMPROBACION DE PAGO" in tabla.columns:
-    tabla["LINK PDF"] = tabla["COMPROBACION DE PAGO"].astype(str).str.strip().str.upper().map(pdfs_drive)
+    tabla["LINK PDF"] = tabla["COMPROBACION DE PAGO"].apply(
+        lambda x: pdfs_drive.get(normalizar_nombre(x), None)
+    )
     tabla["LINK PDF"] = tabla["LINK PDF"].apply(
         lambda x: f"[Ver PDF]({x})" if pd.notna(x) else "NO ENCONTRADO"
     )
