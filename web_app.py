@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
 from io import BytesIO
 
 # ================= ENCABEZADO =================
@@ -67,6 +68,44 @@ def cargar_datos():
 
 
 df, df_comp = cargar_datos()
+
+# ================= DRIVE PDFs COMPROBACION =================
+ID_CARPETA_COMPROBACION = "1S7pA80opb45sSeiYy3asOLP4EeF86xbD"
+
+@st.cache_data
+def obtener_pdfs_drive():
+    scopes = ["https://www.googleapis.com/auth/drive.readonly"]
+    creds = Credentials.from_service_account_info(
+        st.secrets["google_service_account"],
+        scopes=scopes
+    )
+
+    service = build("drive", "v3", credentials=creds)
+
+    pdfs = {}
+    page_token = None
+
+    while True:
+        response = service.files().list(
+            q=f"'{ID_CARPETA_COMPROBACION}' in parents and mimeType='application/pdf'",
+            spaces="drive",
+            fields="nextPageToken, files(id, name)",
+            pageToken=page_token
+        ).execute()
+
+        for file in response.get("files", []):
+            nombre = file["name"].strip().upper()
+            link = f"https://drive.google.com/file/d/{file['id']}/view"
+            pdfs[nombre] = link
+
+        page_token = response.get("nextPageToken", None)
+        if page_token is None:
+            break
+
+    return pdfs
+
+
+pdfs_drive = obtener_pdfs_drive()
 
 # ================= LISTAS =================
 lista_beneficiarios = sorted(df["BENEFICIARIO"].dropna().astype(str).unique())
@@ -172,7 +211,12 @@ c.metric("Monto pendiente", formato_pesos(m3))
 # ================= TABLA =================
 st.subheader("Tabla de Resultados")
 
-columnas = ["BENEFICIARIO", "NUM_CONTRATO", "OFICIO_SOLICITUD", "CLC", "importe", "FACTURA", "FECHA_PAGO"]
+columnas = [
+    "BENEFICIARIO", "NUM_CONTRATO", "OFICIO_SOLICITUD",
+    "CLC", "importe", "FACTURA", "FECHA_PAGO",
+    "COMPROBACION DE PAGO"
+]
+
 tabla = resultado[[c for c in columnas if c in resultado.columns]].copy()
 
 if "FECHA_PAGO" in tabla:
@@ -180,6 +224,13 @@ if "FECHA_PAGO" in tabla:
 
 total_importe = tabla["importe"].apply(pd.to_numeric, errors="coerce").sum()
 tabla["importe"] = tabla["importe"].apply(formato_pesos)
+
+# ================= VINCULAR PDF =================
+if "COMPROBACION DE PAGO" in tabla.columns:
+    tabla["LINK PDF"] = tabla["COMPROBACION DE PAGO"].astype(str).str.strip().str.upper().map(pdfs_drive)
+    tabla["LINK PDF"] = tabla["LINK PDF"].apply(
+        lambda x: f"[Ver PDF]({x})" if pd.notna(x) else "NO ENCONTRADO"
+    )
 
 st.markdown("---")
 
@@ -194,13 +245,6 @@ with col_t2:
         value=formato_pesos(total_importe)
     )
 
-
-#fila_total = {c: "" for c in tabla.columns}
-#fila_total["BENEFICIARIO"] = "TOTAL"
-#fila_total["importe"] = f"**{formato_pesos(total_importe)}**"
-
-#tabla = pd.concat([tabla, pd.DataFrame([fila_total])], ignore_index=True)
-
 alto_tabla = min(420, (len(tabla) + 1) * 35)
 
 st.dataframe(tabla, use_container_width=True, height=alto_tabla)
@@ -212,6 +256,7 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
 
