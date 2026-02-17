@@ -6,6 +6,26 @@ from googleapiclient.discovery import build
 from io import BytesIO
 import re
 
+st.markdown("""
+<style>
+
+/* Oculta barra superior (Share, GitHub, etc.) */
+header {visibility: hidden;}
+
+/* Oculta footer */
+footer {visibility: hidden;}
+
+/* Oculta badge inferior */
+[data-testid="stDecoration"] {display: none !important;}
+
+/* Oculta botón flotante Manage app */
+div[data-testid="stStatusWidget"] {
+    display: none !important;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
 # ================= ENCABEZADO =================
 c1, c2, c3 = st.columns([1, 6, 1], vertical_alignment="center")
 
@@ -31,8 +51,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("Buscador de Pagos y Consumo de Contratos")
-
+st.header("BUSCADOR DE PAGOS Y CONSUMO DE CONTRATOS", anchor=False)
 # ================= ACTUALIZAR DATOS =================
 col1, _ = st.columns([1, 6])
 
@@ -156,7 +175,7 @@ def convertir_excel(df):
     return output.getvalue()
 
 # ================= FILTROS =================
-st.subheader("Filtros")
+st.header("FILTROS", anchor=False)
 
 c1, c2, c3, c4, c5 = st.columns([2, 2, 2, 2, 1])
 
@@ -210,7 +229,7 @@ else:
             ]
 
 # ================= CONSUMO =================
-st.subheader("Consumo del contrato")
+st.header("CONSUMO DEL CONTRATO", anchor=False)
 
 m1, m2, m3 = calcular_consumo(st.session_state.contrato)
 a, b, c = st.columns(3)
@@ -219,7 +238,7 @@ b.metric("Monto ejercido", formato_pesos(m2))
 c.metric("Monto pendiente", formato_pesos(m3))
 
 # ================= TABLA =================
-st.subheader("Tabla de Resultados")
+st.header("TABLA DE RESULTADOS:", anchor=False)
 
 columnas = [
     "BENEFICIARIO", "NUM_CONTRATO", "OFICIO_SOLICITUD",
@@ -268,6 +287,7 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
 
