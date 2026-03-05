@@ -6,25 +6,7 @@ from googleapiclient.discovery import build
 from io import BytesIO
 import re
 
-st.markdown("""
-<style>
 
-/* Oculta barra superior (Share, GitHub, etc.) */
-header {visibility: hidden;}
-
-/* Oculta footer */
-footer {visibility: hidden;}
-
-/* Oculta badge inferior */
-[data-testid="stDecoration"] {display: none !important;}
-
-/* Oculta botón flotante Manage app */
-div[data-testid="stStatusWidget"] {
-    display: none !important;
-}
-
-</style>
-""", unsafe_allow_html=True)
 
 # ================= ENCABEZADO =================
 c1, c2, c3 = st.columns([1, 6, 1], vertical_alignment="center")
@@ -287,6 +269,7 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
 
