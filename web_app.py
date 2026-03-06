@@ -6,7 +6,7 @@ from googleapiclient.discovery import build
 from io import BytesIO
 import re
 
-
+st.write(st.secrets)
 
 # ================= ENCABEZADO =================
 c1, c2, c3 = st.columns([1, 6, 1], vertical_alignment="center")
@@ -272,6 +272,7 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
 
