@@ -85,7 +85,10 @@ ID_CARPETA_COMPROBACION = "1S7pA80opb45sSeiYy3asOLP4EeF86xbD"
 
 @st.cache_data
 def obtener_pdfs_drive():
-    scopes = ["https://www.googleapis.com/auth/drive.readonly"]
+    scopes = [
+    "https://www.googleapis.com/auth/spreadsheets.readonly",
+    "https://www.googleapis.com/auth/drive.readonly"
+]   
     creds = Credentials.from_service_account_info(
         st.secrets["google_service_account"],
         scopes=scopes
@@ -269,6 +272,7 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
 
 
 
