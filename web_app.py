@@ -4,9 +4,6 @@ import gspread
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from io import BytesIO
-import re
-
-st.write(st.secrets)
 
 # ================= ENCABEZADO =================
 c1, c2, c3 = st.columns([1, 6, 1], vertical_alignment="center")
@@ -33,7 +30,8 @@ st.set_page_config(
     layout="wide"
 )
 
-st.header("BUSCADOR DE PAGOS Y CONSUMO DE CONTRATOS", anchor=False)
+st.title("Buscador de Pagos y Consumo de Contratos")
+
 # ================= ACTUALIZAR DATOS =================
 col1, _ = st.columns([1, 6])
 
@@ -70,56 +68,6 @@ def cargar_datos():
 
 
 df, df_comp = cargar_datos()
-
-# ================= NORMALIZADOR =================
-def normalizar_nombre(texto):
-    if not texto:
-        return ""
-    texto = str(texto).upper()
-    texto = texto.replace(".PDF", "")
-    texto = re.sub(r"\s+", "", texto)
-    return texto.strip()
-
-# ================= DRIVE PDFs =================
-ID_CARPETA_COMPROBACION = "1S7pA80opb45sSeiYy3asOLP4EeF86xbD"
-
-@st.cache_data
-def obtener_pdfs_drive():
-    scopes = [
-    "https://www.googleapis.com/auth/spreadsheets.readonly",
-    "https://www.googleapis.com/auth/drive.readonly"
-]   
-    creds = Credentials.from_service_account_info(
-        st.secrets["google_service_account"],
-        scopes=scopes
-    )
-
-    service = build("drive", "v3", credentials=creds)
-
-    pdfs = {}
-    page_token = None
-
-    while True:
-        response = service.files().list(
-            q=f"'{ID_CARPETA_COMPROBACION}' in parents and mimeType='application/pdf'",
-            spaces="drive",
-            fields="nextPageToken, files(id, name)",
-            pageToken=page_token
-        ).execute()
-
-        for file in response.get("files", []):
-            nombre_normalizado = normalizar_nombre(file["name"])
-            link = f"https://drive.google.com/file/d/{file['id']}/view"
-            pdfs[nombre_normalizado] = link
-
-        page_token = response.get("nextPageToken", None)
-        if page_token is None:
-            break
-
-    return pdfs
-
-
-pdfs_drive = obtener_pdfs_drive()
 
 # ================= LISTAS =================
 lista_beneficiarios = sorted(df["BENEFICIARIO"].dropna().astype(str).unique())
@@ -160,7 +108,7 @@ def convertir_excel(df):
     return output.getvalue()
 
 # ================= FILTROS =================
-st.header("FILTROS", anchor=False)
+st.subheader("Filtros")
 
 c1, c2, c3, c4, c5 = st.columns([2, 2, 2, 2, 1])
 
@@ -214,7 +162,7 @@ else:
             ]
 
 # ================= CONSUMO =================
-st.header("CONSUMO DEL CONTRATO", anchor=False)
+st.subheader("Consumo del contrato")
 
 m1, m2, m3 = calcular_consumo(st.session_state.contrato)
 a, b, c = st.columns(3)
@@ -223,7 +171,7 @@ b.metric("Monto ejercido", formato_pesos(m2))
 c.metric("Monto pendiente", formato_pesos(m3))
 
 # ================= TABLA =================
-st.header("TABLA DE RESULTADOS:", anchor=False)
+st.subheader("Tabla de Resultados")
 
 columnas = [
     "BENEFICIARIO", "NUM_CONTRATO", "OFICIO_SOLICITUD",
@@ -239,11 +187,9 @@ if "FECHA_PAGO" in tabla:
 total_importe = tabla["importe"].apply(pd.to_numeric, errors="coerce").sum()
 tabla["importe"] = tabla["importe"].apply(formato_pesos)
 
-# ================= VINCULAR PDF INTELIGENTE =================
+# ================= VINCULAR PDF =================
 if "COMPROBACION DE PAGO" in tabla.columns:
-    tabla["LINK PDF"] = tabla["COMPROBACION DE PAGO"].apply(
-        lambda x: pdfs_drive.get(normalizar_nombre(x), None)
-    )
+    tabla["LINK PDF"] = tabla["COMPROBACION DE PAGO"].astype(str).str.strip().str.upper().map(pdfs_drive)
     tabla["LINK PDF"] = tabla["LINK PDF"].apply(
         lambda x: f"[Ver PDF]({x})" if pd.notna(x) else "NO ENCONTRADO"
     )
@@ -272,6 +218,8 @@ st.download_button(
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
+
+
 
 
 
