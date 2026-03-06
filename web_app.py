@@ -2,8 +2,13 @@ import streamlit as st
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
 from io import BytesIO
+
+# ================= CONFIGURACIÓN =================
+st.set_page_config(
+    page_title="Buscador de Pagos y Consumo de Contratos",
+    layout="wide"
+)
 
 # ================= ENCABEZADO =================
 c1, c2, c3 = st.columns([1, 6, 1], vertical_alignment="center")
@@ -23,12 +28,6 @@ with c2:
 
 with c3:
     st.image("LOGO CUAUHTEMOC.png", width=110)
-
-# ================= CONFIGURACIÓN =================
-st.set_page_config(
-    page_title="Buscador de Pagos y Consumo de Contratos",
-    layout="wide"
-)
 
 st.title("Buscador de Pagos y Consumo de Contratos")
 
@@ -50,12 +49,16 @@ ID_SHEET = "1y66tbEhZ4E0XGPuUBB3O21A-56T_KAQs"
 
 @st.cache_data
 def cargar_datos():
+
     scopes = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+
     creds = Credentials.from_service_account_info(
         st.secrets["google_service_account"],
         scopes=scopes
     )
+
     client = gspread.authorize(creds)
+
     sh = client.open_by_key(ID_SHEET)
 
     df_pagos = pd.DataFrame(sh.worksheet("PAGOS").get_all_records())
@@ -81,6 +84,7 @@ def formato_pesos(valor):
 
 
 def calcular_consumo(contrato):
+
     if not contrato:
         return 0, 0, 0
 
@@ -102,9 +106,12 @@ def calcular_consumo(contrato):
 
 
 def convertir_excel(df):
+
     output = BytesIO()
+
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df.to_excel(writer, index=False)
+
     return output.getvalue()
 
 # ================= FILTROS =================
@@ -119,11 +126,14 @@ with c1:
     )
 
 if st.session_state.beneficiario:
+
     contratos_filtrados = (
         df[df["BENEFICIARIO"] == st.session_state.beneficiario]["NUM_CONTRATO"]
         .dropna().astype(str).unique().tolist()
     )
+
 else:
+
     contratos_filtrados = df["NUM_CONTRATO"].dropna().astype(str).unique().tolist()
 
 with c2:
@@ -149,13 +159,16 @@ resultado = df.copy()
 
 if st.session_state.beneficiario and len(contratos_filtrados) > 1 and not st.session_state.contrato:
     resultado = resultado.iloc[0:0]
+
 else:
+
     for col, val in {
         "BENEFICIARIO": st.session_state.beneficiario,
         "CLC": st.session_state.clc,
         "NUM_CONTRATO": st.session_state.contrato,
         "FACTURA": st.session_state.factura
     }.items():
+
         if val:
             resultado = resultado[
                 resultado[col].astype(str).str.contains(val, case=False, na=False)
@@ -165,7 +178,9 @@ else:
 st.subheader("Consumo del contrato")
 
 m1, m2, m3 = calcular_consumo(st.session_state.contrato)
+
 a, b, c = st.columns(3)
+
 a.metric("Monto del contrato", formato_pesos(m1))
 b.metric("Monto ejercido", formato_pesos(m2))
 c.metric("Monto pendiente", formato_pesos(m3))
@@ -174,38 +189,36 @@ c.metric("Monto pendiente", formato_pesos(m3))
 st.subheader("Tabla de Resultados")
 
 columnas = [
-    "BENEFICIARIO", "NUM_CONTRATO", "OFICIO_SOLICITUD",
-    "CLC", "importe", "FACTURA", "FECHA_PAGO",
-    "COMPROBACION DE PAGO"
+    "BENEFICIARIO",
+    "NUM_CONTRATO",
+    "OFICIO_SOLICITUD",
+    "CLC",
+    "importe",
+    "FACTURA",
+    "FECHA_PAGO",
 ]
 
 tabla = resultado[[c for c in columnas if c in resultado.columns]].copy()
 
 if "FECHA_PAGO" in tabla:
-    tabla["FECHA_PAGO"] = pd.to_datetime(tabla["FECHA_PAGO"], errors="coerce").dt.strftime("%d/%m/%Y")
+    tabla["FECHA_PAGO"] = pd.to_datetime(
+        tabla["FECHA_PAGO"],
+        errors="coerce"
+    ).dt.strftime("%d/%m/%Y")
 
 total_importe = tabla["importe"].apply(pd.to_numeric, errors="coerce").sum()
-tabla["importe"] = tabla["importe"].apply(formato_pesos)
 
-# ================= VINCULAR PDF =================
-if "COMPROBACION DE PAGO" in tabla.columns:
-    tabla["LINK PDF"] = tabla["COMPROBACION DE PAGO"].astype(str).str.strip().str.upper().map(pdfs_drive)
-    tabla["LINK PDF"] = tabla["LINK PDF"].apply(
-        lambda x: f"[Ver PDF]({x})" if pd.notna(x) else "NO ENCONTRADO"
-    )
+tabla["importe"] = tabla["importe"].apply(formato_pesos)
 
 st.markdown("---")
 
 col_t1, col_t2 = st.columns([4, 1])
 
 with col_t1:
-    st.markdown("###  MONTO TOTAL DE PAGOS ENCONTRADOS")
+    st.markdown("### MONTO TOTAL DE PAGOS ENCONTRADOS")
 
 with col_t2:
-    st.metric(
-        label="",
-        value=formato_pesos(total_importe)
-    )
+    st.metric("", formato_pesos(total_importe))
 
 alto_tabla = min(420, (len(tabla) + 1) * 35)
 
@@ -213,18 +226,12 @@ st.dataframe(tabla, use_container_width=True, height=alto_tabla)
 
 # ================= EXPORTAR =================
 st.divider()
+
 st.download_button(
     "Descargar resultados en Excel",
     convertir_excel(tabla),
     file_name="resultados_pagos.xlsx"
 )
-
-
-
-
-
-
-
 
 
 
