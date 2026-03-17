@@ -31,6 +31,30 @@ with c3:
 
 st.title("Buscador de Pagos y Consumo de Contratos")
 
+# ================= IDS POR AÑO =================
+IDS_SHEETS = {
+    "2025": "14D-Q2oyPZ1u8VbDgq5QorhUKPzz9pjtZQyRxwys5nmA",
+    "2026": "1Dr6IlKOECZ-rgeXQ-4hfEgFEr1lucFc-6BuljR_S9r4"
+}
+
+# ================= SELECTOR DE AÑO =================
+st.subheader("Seleccionar Año")
+
+año = st.selectbox(
+    "Año de consulta",
+    ["2025", "2026"]
+)
+
+# ================= LIMPIAR FILTROS SI CAMBIA EL AÑO =================
+if "año_anterior" not in st.session_state:
+    st.session_state.año_anterior = año
+
+if st.session_state.año_anterior != año:
+    for k in ["beneficiario", "clc", "contrato", "factura"]:
+        st.session_state[k] = ""
+    st.session_state.año_anterior = año
+    st.rerun()
+
 # ================= ACTUALIZAR DATOS =================
 col1, _ = st.columns([1, 6])
 
@@ -45,10 +69,8 @@ for key in ["beneficiario", "clc", "contrato", "factura"]:
     st.session_state.setdefault(key, "")
 
 # ================= GOOGLE SHEETS =================
-ID_SHEET = "14D-Q2oyPZ1u8VbDgq5QorhUKPzz9pjtZQyRxwys5nmA"
-
 @st.cache_data
-def cargar_datos():
+def cargar_datos(año):
 
     scopes = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
@@ -59,7 +81,9 @@ def cargar_datos():
 
     client = gspread.authorize(creds)
 
-    sh = client.open_by_key(ID_SHEET)
+    sheet_id = IDS_SHEETS[año]
+
+    sh = client.open_by_key(sheet_id)
 
     df_pagos = pd.DataFrame(sh.worksheet("PAGOS").get_all_records())
     df_comp = pd.DataFrame(sh.worksheet("COMPROMISOS").get_all_records())
@@ -70,7 +94,7 @@ def cargar_datos():
     return df_pagos, df_comp
 
 
-df, df_comp = cargar_datos()
+df, df_comp = cargar_datos(año)
 
 # ================= LISTAS =================
 lista_beneficiarios = sorted(df["BENEFICIARIO"].dropna().astype(str).unique())
@@ -230,9 +254,8 @@ st.divider()
 st.download_button(
     "Descargar resultados en Excel",
     convertir_excel(tabla),
-    file_name="resultados_pagos.xlsx"
+    file_name=f"resultados_pagos_{año}.xlsx"
 )
-
 
 
 
