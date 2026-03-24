@@ -230,6 +230,17 @@ if "FECHA_PAGO" in tabla:
         errors="coerce"
     ).dt.strftime("%d/%m/%Y")
 
+st.write("Columnas originales:", tabla.columns.tolist())
+
+tabla.columns = (
+    tabla.columns
+    .str.strip()
+    .str.lower()
+    .str.replace(" ", "_")
+)
+
+st.write("Columnas limpias:", tabla.columns.tolist())
+
 total_importe = tabla["importe"].apply(pd.to_numeric, errors="coerce").sum()
 
 tabla["importe"] = tabla["importe"].apply(formato_pesos)
