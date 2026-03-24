@@ -31,16 +31,41 @@ with c3:
 
 st.title("Buscador de Pagos y Consumo de Contratos")
 
-# ================= IDS =================
+# ================= IDS POR AÑO =================
 IDS_SHEETS = {
     "2025": "14D-Q2oyPZ1u8VbDgq5QorhUKPzz9pjtZQyRxwys5nmA",
     "2026": "1Dr6IlKOECZ-rgeXQ-4hfEgFEr1lucFc-6BuljR_S9r4"
 }
 
-# ================= SELECTOR =================
+# ================= SELECTOR DE AÑO =================
+st.subheader("Seleccionar Año")
+
 año = st.selectbox("Año de consulta", ["2025", "2026"])
 
-# ================= CACHE =================
+# ================= LIMPIAR FILTROS =================
+if "año_anterior" not in st.session_state:
+    st.session_state.año_anterior = año
+
+if st.session_state.año_anterior != año:
+    for k in ["beneficiario", "clc", "contrato", "factura"]:
+        st.session_state[k] = ""
+    st.session_state.año_anterior = año
+    st.rerun()
+
+# ================= ACTUALIZAR DATOS =================
+col1, _ = st.columns([1, 6])
+
+with col1:
+    if st.button("Actualizar datos"):
+        st.cache_data.clear()
+        st.success("Datos actualizados desde Google Sheets")
+        st.rerun()
+
+# ================= ESTADO =================
+for key in ["beneficiario", "clc", "contrato", "factura"]:
+    st.session_state.setdefault(key, "")
+
+# ================= GOOGLE SHEETS =================
 @st.cache_data
 def cargar_datos(año):
 
@@ -52,28 +77,23 @@ def cargar_datos(año):
     )
 
     client = gspread.authorize(creds)
-    sh = client.open_by_key(IDS_SHEETS[año])
+    sheet_id = IDS_SHEETS[año]
+    sh = client.open_by_key(sheet_id)
 
     df_pagos = pd.DataFrame(sh.worksheet("PAGOS").get_all_records())
     df_comp = pd.DataFrame(sh.worksheet("COMPROMISOS").get_all_records())
 
-    # 🔥 NORMALIZACIÓN PRO
-    def limpiar_columnas(df):
-        df.columns = (
-            df.columns
-            .str.strip()
-            .str.lower()
-            .str.replace(" ", "_")
-        )
-        return df
-
-    df_pagos = limpiar_columnas(df_pagos)
-    df_comp = limpiar_columnas(df_comp)
+    # 🔥 SOLO NORMALIZAMOS (sin romper tu lógica)
+    df_pagos.columns = df_pagos.columns.str.strip().str.upper()
+    df_comp.columns = df_comp.columns.str.strip().str.upper()
 
     return df_pagos, df_comp
 
 
 df, df_comp = cargar_datos(año)
+
+# ================= LISTAS =================
+lista_beneficiarios = sorted(df["BENEFICIARIO"].dropna().astype(str).unique())
 
 # ================= FUNCIONES =================
 def formato_pesos(valor):
@@ -83,39 +103,24 @@ def formato_pesos(valor):
         return "$ 0.00"
 
 
-def obtener_columna(df, nombre):
-    """Busca columnas aunque cambien ligeramente"""
-    for col in df.columns:
-        if nombre in col:
-            return col
-    return None
-
-
 def calcular_consumo(contrato):
 
     if not contrato:
         return 0, 0, 0
 
-    col_contrato_comp = obtener_columna(df_comp, "texto")
-    col_importe_comp = obtener_columna(df_comp, "importe")
+    monto_contrato = (
+        df_comp[df_comp["TEXTO CAB.DOCUMENTO"].astype(str) == str(contrato)]
+        ["IMPORTE TOTAL (LC)"]
+        .apply(pd.to_numeric, errors="coerce")
+        .sum()
+    )
 
-    col_contrato = obtener_columna(df, "num_contrato")
-    col_importe = obtener_columna(df, "importe")
-
-    monto_contrato = 0
-    monto_ejercido = 0
-
-    if col_contrato_comp and col_importe_comp:
-        monto_contrato = pd.to_numeric(
-            df_comp[df_comp[col_contrato_comp].astype(str) == str(contrato)][col_importe_comp],
-            errors="coerce"
-        ).sum()
-
-    if col_contrato and col_importe:
-        monto_ejercido = pd.to_numeric(
-            df[df[col_contrato].astype(str) == str(contrato)][col_importe],
-            errors="coerce"
-        ).sum()
+    monto_ejercido = (
+        df[df["NUM_CONTRATO"].astype(str) == str(contrato)]
+        ["IMPORTE"]
+        .apply(pd.to_numeric, errors="coerce")
+        .sum()
+    )
 
     return monto_contrato, monto_ejercido, monto_contrato - monto_ejercido
 
@@ -129,82 +134,125 @@ def convertir_excel(df):
 # ================= FILTROS =================
 st.subheader("Filtros")
 
-col_benef = obtener_columna(df, "beneficiario")
-col_contrato = obtener_columna(df, "contrato")
-col_clc = obtener_columna(df, "clc")
-col_factura = obtener_columna(df, "factura")
-
-lista_beneficiarios = sorted(df[col_benef].dropna().astype(str).unique()) if col_benef else []
-
-c1, c2, c3, c4 = st.columns(4)
+c1, c2, c3, c4, c5 = st.columns([2, 2, 2, 2, 1])
 
 with c1:
-    beneficiario = st.selectbox("Beneficiario", [""] + lista_beneficiarios)
+    st.session_state.beneficiario = st.selectbox(
+        "Beneficiario",
+        [""] + lista_beneficiarios
+    )
+
+if st.session_state.beneficiario:
+
+    contratos_filtrados = (
+        df[df["BENEFICIARIO"] == st.session_state.beneficiario]["NUM_CONTRATO"]
+        .dropna().astype(str).unique().tolist()
+    )
+
+else:
+
+    contratos_filtrados = df["NUM_CONTRATO"].dropna().astype(str).unique().tolist()
 
 with c2:
-    contrato = st.text_input("Contrato")
+    st.session_state.clc = st.text_input("CLC")
 
 with c3:
-    clc = st.text_input("CLC")
+    st.session_state.contrato = st.selectbox(
+        "Num. Contrato",
+        [""] + sorted(contratos_filtrados)
+    )
 
 with c4:
-    factura = st.text_input("Factura")
+    st.session_state.factura = st.text_input("Factura")
+
+with c5:
+    if st.button("Limpiar"):
+        for k in ["beneficiario", "clc", "contrato", "factura"]:
+            st.session_state[k] = ""
+        st.rerun()
 
 # ================= FILTRADO =================
 resultado = df.copy()
 
-filtros = [
-    (col_benef, beneficiario),
-    (col_contrato, contrato),
-    (col_clc, clc),
-    (col_factura, factura),
-]
+if st.session_state.beneficiario and len(contratos_filtrados) > 1 and not st.session_state.contrato:
+    resultado = resultado.iloc[0:0]
 
-for col, val in filtros:
-    if col and val:
-        resultado = resultado[
-            resultado[col].astype(str).str.contains(val, case=False, na=False)
-        ]
+else:
+
+    for col, val in {
+        "BENEFICIARIO": st.session_state.beneficiario,
+        "CLC": st.session_state.clc,
+        "NUM_CONTRATO": st.session_state.contrato,
+        "FACTURA": st.session_state.factura
+    }.items():
+
+        if val:
+            resultado = resultado[
+                resultado[col].astype(str).str.contains(val, case=False, na=False)
+            ]
 
 # ================= CONSUMO =================
 st.subheader("Consumo del contrato")
 
-m1, m2, m3 = calcular_consumo(contrato)
+m1, m2, m3 = calcular_consumo(st.session_state.contrato)
 
 a, b, c = st.columns(3)
+
 a.metric("Monto del contrato", formato_pesos(m1))
 b.metric("Monto ejercido", formato_pesos(m2))
 c.metric("Monto pendiente", formato_pesos(m3))
 
 # ================= TABLA =================
-st.subheader("Resultados")
+st.subheader("Tabla de Resultados")
 
-col_importe = obtener_columna(resultado, "importe")
-col_fecha = obtener_columna(resultado, "fecha")
+columnas = [
+    "BENEFICIARIO",
+    "NUM_CONTRATO",
+    "OFICIO_SOLICITUD",
+    "CLC",
+    "IMPORTE",  # 🔥 corregido
+    "FACTURA",
+    "FECHA_PAGO",
+]
 
-tabla = resultado.copy()
+tabla = resultado[[c for c in columnas if c in resultado.columns]].copy()
 
-if col_fecha:
-    tabla[col_fecha] = pd.to_datetime(tabla[col_fecha], errors="coerce").dt.strftime("%d/%m/%Y")
+if "FECHA_PAGO" in tabla.columns:
+    tabla["FECHA_PAGO"] = pd.to_datetime(
+        tabla["FECHA_PAGO"],
+        errors="coerce"
+    ).dt.strftime("%d/%m/%Y")
 
-if col_importe:
-    total_importe = pd.to_numeric(tabla[col_importe], errors="coerce").sum()
-    tabla[col_importe] = tabla[col_importe].apply(formato_pesos)
+# 🔥 FIX DEL ERROR
+if "IMPORTE" in tabla.columns:
+    total_importe = pd.to_numeric(tabla["IMPORTE"], errors="coerce").sum()
+    tabla["IMPORTE"] = tabla["IMPORTE"].apply(formato_pesos)
 else:
     total_importe = 0
-    st.warning("No se encontró columna de importe")
+    st.warning("No se encontró la columna IMPORTE")
 
-st.metric("TOTAL PAGOS", formato_pesos(total_importe))
+st.markdown("---")
 
-st.dataframe(tabla, use_container_width=True)
+col_t1, col_t2 = st.columns([4, 1])
+
+with col_t1:
+    st.markdown("### MONTO TOTAL DE PAGOS ENCONTRADOS")
+
+with col_t2:
+    st.metric("", formato_pesos(total_importe))
+
+alto_tabla = min(420, (len(tabla) + 1) * 35)
+
+st.dataframe(tabla, use_container_width=True, height=alto_tabla)
 
 # ================= EXPORTAR =================
-st.download_button(
-    "Descargar Excel",
-    convertir_excel(tabla),
-    file_name=f"pagos_{año}.xlsx"
-)
+st.divider()
 
+st.download_button(
+    "Descargar resultados en Excel",
+    convertir_excel(tabla),
+    file_name=f"resultados_pagos_{año}.xlsx"
+)
 
 
 
