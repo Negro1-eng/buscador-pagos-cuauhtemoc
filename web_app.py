@@ -39,7 +39,6 @@ IDS_SHEETS = {
 
 # ================= SELECTOR DE AÑO =================
 st.subheader("Seleccionar Año")
-
 año = st.selectbox("Año de consulta", ["2025", "2026"])
 
 # ================= LIMPIAR FILTROS =================
@@ -83,7 +82,6 @@ def cargar_datos(año):
     df_pagos = pd.DataFrame(sh.worksheet("PAGOS").get_all_records())
     df_comp = pd.DataFrame(sh.worksheet("COMPROMISOS").get_all_records())
 
-    # 🔥 SOLO NORMALIZAMOS (sin romper tu lógica)
     df_pagos.columns = df_pagos.columns.str.strip().str.upper()
     df_comp.columns = df_comp.columns.str.strip().str.upper()
 
@@ -92,15 +90,18 @@ def cargar_datos(año):
 
 df, df_comp = cargar_datos(año)
 
-# ================= LISTAS =================
-lista_beneficiarios = sorted(df["BENEFICIARIO"].dropna().astype(str).unique())
-
 # ================= FUNCIONES =================
 def formato_pesos(valor):
     try:
         return f"$ {float(valor):,.2f}"
     except:
         return "$ 0.00"
+
+
+def crear_link(url, texto="Ver PDF"):
+    if pd.notna(url) and str(url).startswith("http"):
+        return f'<a href="{url}" target="_blank">{texto}</a>'
+    return ""
 
 
 def calcular_consumo(contrato):
@@ -134,6 +135,8 @@ def convertir_excel(df):
 # ================= FILTROS =================
 st.subheader("Filtros")
 
+lista_beneficiarios = sorted(df["BENEFICIARIO"].dropna().astype(str).unique())
+
 c1, c2, c3, c4, c5 = st.columns([2, 2, 2, 2, 1])
 
 with c1:
@@ -143,14 +146,11 @@ with c1:
     )
 
 if st.session_state.beneficiario:
-
     contratos_filtrados = (
         df[df["BENEFICIARIO"] == st.session_state.beneficiario]["NUM_CONTRATO"]
         .dropna().astype(str).unique().tolist()
     )
-
 else:
-
     contratos_filtrados = df["NUM_CONTRATO"].dropna().astype(str).unique().tolist()
 
 with c2:
@@ -174,33 +174,29 @@ with c5:
 # ================= FILTRADO =================
 resultado = df.copy()
 
-if st.session_state.beneficiario and len(contratos_filtrados) > 1 and not st.session_state.contrato:
-    resultado = resultado.iloc[0:0]
+for col, val in {
+    "BENEFICIARIO": st.session_state.beneficiario,
+    "CLC": st.session_state.clc,
+    "NUM_CONTRATO": st.session_state.contrato,
+    "FACTURA": st.session_state.factura
+}.items():
+    if val:
+        resultado = resultado[
+            resultado[col].astype(str).str.contains(val, case=False, na=False)
+        ]
 
-else:
+# ================= AGREGAR LINKS SOLO 2026 =================
+if año == "2026":
 
-    for col, val in {
-        "BENEFICIARIO": st.session_state.beneficiario,
-        "CLC": st.session_state.clc,
-        "NUM_CONTRATO": st.session_state.contrato,
-        "FACTURA": st.session_state.factura
-    }.items():
+    if "PDF_FACTURA" in resultado.columns:
+        resultado["FACTURA_LINK"] = resultado["PDF_FACTURA"].apply(
+            lambda x: crear_link(x, "Factura")
+        )
 
-        if val:
-            resultado = resultado[
-                resultado[col].astype(str).str.contains(val, case=False, na=False)
-            ]
-
-# ================= CONSUMO =================
-st.subheader("Consumo del contrato")
-
-m1, m2, m3 = calcular_consumo(st.session_state.contrato)
-
-a, b, c = st.columns(3)
-
-a.metric("Monto del contrato", formato_pesos(m1))
-b.metric("Monto ejercido", formato_pesos(m2))
-c.metric("Monto pendiente", formato_pesos(m3))
+    if "PDF_PAGO" in resultado.columns:
+        resultado["PAGO_LINK"] = resultado["PDF_PAGO"].apply(
+            lambda x: crear_link(x, "Pago")
+        )
 
 # ================= TABLA =================
 st.subheader("Tabla de Resultados")
@@ -208,52 +204,38 @@ st.subheader("Tabla de Resultados")
 columnas = [
     "BENEFICIARIO",
     "NUM_CONTRATO",
-    "OFICIO_SOLICITUD",
     "CLC",
-    "IMPORTE",  # 🔥 corregido
+    "IMPORTE",
     "FACTURA",
-    "FECHA_PAGO",
+    "FECHA_PAGO"
 ]
+
+if año == "2026":
+    columnas += ["FACTURA_LINK", "PAGO_LINK"]
 
 tabla = resultado[[c for c in columnas if c in resultado.columns]].copy()
 
-if "FECHA_PAGO" in tabla.columns:
-    tabla["FECHA_PAGO"] = pd.to_datetime(
-        tabla["FECHA_PAGO"],
-        errors="coerce"
-    ).dt.strftime("%d/%m/%Y")
-
-# 🔥 FIX DEL ERROR
 if "IMPORTE" in tabla.columns:
     total_importe = pd.to_numeric(tabla["IMPORTE"], errors="coerce").sum()
     tabla["IMPORTE"] = tabla["IMPORTE"].apply(formato_pesos)
 else:
     total_importe = 0
-    st.warning("No se encontró la columna IMPORTE")
 
-st.markdown("---")
+# MOSTRAR HTML (para que funcionen links)
+st.write(
+    tabla.to_html(escape=False, index=False),
+    unsafe_allow_html=True
+)
 
-col_t1, col_t2 = st.columns([4, 1])
-
-with col_t1:
-    st.markdown("### MONTO TOTAL DE PAGOS ENCONTRADOS")
-
-with col_t2:
-    st.metric("", formato_pesos(total_importe))
-
-alto_tabla = min(420, (len(tabla) + 1) * 35)
-
-st.dataframe(tabla, use_container_width=True, height=alto_tabla)
+# ================= TOTAL =================
+st.metric("Total pagos", formato_pesos(total_importe))
 
 # ================= EXPORTAR =================
-st.divider()
-
 st.download_button(
     "Descargar resultados en Excel",
     convertir_excel(tabla),
     file_name=f"resultados_pagos_{año}.xlsx"
 )
-
 
 
 
