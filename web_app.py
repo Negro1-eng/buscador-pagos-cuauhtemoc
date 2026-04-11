@@ -5,27 +5,70 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from io import BytesIO
 
-# ================= CONFIG =================
+# ================= CONFIGURACIÓN =================
 st.set_page_config(
     page_title="Buscador de Pagos y Consumo de Contratos",
     layout="wide"
 )
 
-# ================= IDS =================
+# ================= ENCABEZADO =================
+c1, c2, c3 = st.columns([1, 6, 1], vertical_alignment="center")
+
+with c1:
+    st.image("LOGO CDMX.jpg", width=110)
+
+with c2:
+    st.markdown(
+        """
+        <div style="text-align:center">
+            <h2 style="margin-bottom:0">Alcaldía Cuauhtémoc</h2>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+with c3:
+    st.image("LOGO CUAUHTEMOC.png", width=110)
+
+st.title("Buscador de Pagos y Consumo de Contratos")
+
+# ================= IDS POR AÑO =================
 IDS_SHEETS = {
     "2025": "14D-Q2oyPZ1u8VbDgq5QorhUKPzz9pjtZQyRxwys5nmA",
     "2026": "1Dr6IlKOECZ-rgeXQ-4hfEgFEr1lucFc-6BuljR_S9r4"
 }
 
-# 🔥 CARPETAS DRIVE
+# 🔥 IDS DE CARPETAS DRIVE
 FOLDER_FACTURAS = "1VNOrMmdZWalCykgRZSgsHNYlDFU6w6sP"
-FOLDER_PAGOS = "1E-MRmWlPBHzDRTHq89XgKFpHp_kRHcMI"
+FOLDER_PAGOS = "1E-MRmWlPBHzDRTHq89XgKFpHp_kRHcM"
 
-# ================= HEADER =================
-st.title("Buscador de Pagos y Consumo de Contratos")
+# ================= SELECTOR DE AÑO =================
+st.subheader("Seleccionar Año")
 
-# ================= SELECTOR =================
-año = st.selectbox("Año", ["2025", "2026"])
+año = st.selectbox("Año de consulta", ["2025", "2026"])
+
+# ================= LIMPIAR FILTROS =================
+if "año_anterior" not in st.session_state:
+    st.session_state.año_anterior = año
+
+if st.session_state.año_anterior != año:
+    for k in ["beneficiario", "clc", "contrato", "factura"]:
+        st.session_state[k] = ""
+    st.session_state.año_anterior = año
+    st.rerun()
+
+# ================= ACTUALIZAR DATOS =================
+col1, _ = st.columns([1, 6])
+
+with col1:
+    if st.button("Actualizar datos"):
+        st.cache_data.clear()
+        st.success("Datos actualizados desde Google Sheets")
+        st.rerun()
+
+# ================= ESTADO =================
+for key in ["beneficiario", "clc", "contrato", "factura"]:
+    st.session_state.setdefault(key, "")
 
 # ================= GOOGLE SHEETS =================
 @st.cache_data
@@ -39,7 +82,8 @@ def cargar_datos(año):
     )
 
     client = gspread.authorize(creds)
-    sh = client.open_by_key(IDS_SHEETS[año])
+    sheet_id = IDS_SHEETS[año]
+    sh = client.open_by_key(sheet_id)
 
     df_pagos = pd.DataFrame(sh.worksheet("PAGOS").get_all_records())
     df_comp = pd.DataFrame(sh.worksheet("COMPROMISOS").get_all_records())
@@ -49,9 +93,8 @@ def cargar_datos(año):
 
     return df_pagos, df_comp
 
-df, df_comp = cargar_datos(año)
 
-# ================= DRIVE =================
+# ================= GOOGLE DRIVE =================
 @st.cache_data
 def obtener_pdfs_drive():
 
@@ -69,35 +112,50 @@ def obtener_pdfs_drive():
             q=f"'{folder_id}' in parents and mimeType='application/pdf'",
             fields="files(id, name)"
         ).execute()
+
         return resultados.get("files", [])
 
     return listar(FOLDER_FACTURAS), listar(FOLDER_PAGOS)
 
-# 🔥 SOLO CARGA DRIVE SI ES 2026
+
+df, df_comp = cargar_datos(año)
+
+# 🔥 SOLO PARA 2026
 if año == "2026":
     facturas_drive, pagos_drive = obtener_pdfs_drive()
 
+# ================= LISTAS =================
+lista_beneficiarios = sorted(df["BENEFICIARIO"].dropna().astype(str).unique())
+
 # ================= FUNCIONES =================
-def formato_pesos(x):
+def formato_pesos(valor):
     try:
-        return f"$ {float(x):,.2f}"
+        return f"$ {float(valor):,.2f}"
     except:
         return "$ 0.00"
 
-def generar_link(valor, archivos):
-    if pd.isna(valor):
-        return ""
-    valor = str(valor)
 
-    for archivo in archivos:
-        if valor in archivo["name"]:
-            return f"https://drive.google.com/file/d/{archivo['id']}/view"
-    return ""
+def calcular_consumo(contrato):
 
-def crear_link_html(url, texto):
-    if url:
-        return f'<a href="{url}" target="_blank">{texto}</a>'
-    return ""
+    if not contrato:
+        return 0, 0, 0
+
+    monto_contrato = (
+        df_comp[df_comp["TEXTO CAB.DOCUMENTO"].astype(str) == str(contrato)]
+        ["IMPORTE TOTAL (LC)"]
+        .apply(pd.to_numeric, errors="coerce")
+        .sum()
+    )
+
+    monto_ejercido = (
+        df[df["NUM_CONTRATO"].astype(str) == str(contrato)]
+        ["IMPORTE"]
+        .apply(pd.to_numeric, errors="coerce")
+        .sum()
+    )
+
+    return monto_contrato, monto_ejercido, monto_contrato - monto_ejercido
+
 
 def convertir_excel(df):
     output = BytesIO()
@@ -105,98 +163,156 @@ def convertir_excel(df):
         df.to_excel(writer, index=False)
     return output.getvalue()
 
+
+# 🔥 GENERAR LINK AUTOMÁTICO
+def generar_link(valor, archivos):
+    if pd.isna(valor):
+        return ""
+
+    valor = str(valor)
+
+    for archivo in archivos:
+        if valor in archivo["name"]:
+            return f"https://drive.google.com/file/d/{archivo['id']}/view"
+
+    return ""
+
+
 # ================= FILTROS =================
 st.subheader("Filtros")
 
-beneficiario = st.selectbox(
-    "Beneficiario",
-    [""] + sorted(df["BENEFICIARIO"].dropna().astype(str).unique())
-)
+c1, c2, c3, c4, c5 = st.columns([2, 2, 2, 2, 1])
 
-clc = st.text_input("CLC")
-contrato = st.text_input("Contrato")
-factura = st.text_input("Factura")
+with c1:
+    st.session_state.beneficiario = st.selectbox(
+        "Beneficiario",
+        [""] + lista_beneficiarios
+    )
+
+if st.session_state.beneficiario:
+
+    contratos_filtrados = (
+        df[df["BENEFICIARIO"] == st.session_state.beneficiario]["NUM_CONTRATO"]
+        .dropna().astype(str).unique().tolist()
+    )
+
+else:
+
+    contratos_filtrados = df["NUM_CONTRATO"].dropna().astype(str).unique().tolist()
+
+with c2:
+    st.session_state.clc = st.text_input("CLC")
+
+with c3:
+    st.session_state.contrato = st.selectbox(
+        "Num. Contrato",
+        [""] + sorted(contratos_filtrados)
+    )
+
+with c4:
+    st.session_state.factura = st.text_input("Factura")
+
+with c5:
+    if st.button("Limpiar"):
+        for k in ["beneficiario", "clc", "contrato", "factura"]:
+            st.session_state[k] = ""
+        st.rerun()
 
 # ================= FILTRADO =================
 resultado = df.copy()
 
-for col, val in {
-    "BENEFICIARIO": beneficiario,
-    "CLC": clc,
-    "NUM_CONTRATO": contrato,
-    "FACTURA": factura
-}.items():
-    if val:
-        resultado = resultado[
-            resultado[col].astype(str).str.contains(val, case=False, na=False)
-        ]
+if st.session_state.beneficiario and len(contratos_filtrados) > 1 and not st.session_state.contrato:
+    resultado = resultado.iloc[0:0]
 
-# ================= LINKS DRIVE =================
+else:
+
+    for col, val in {
+        "BENEFICIARIO": st.session_state.beneficiario,
+        "CLC": st.session_state.clc,
+        "NUM_CONTRATO": st.session_state.contrato,
+        "FACTURA": st.session_state.factura
+    }.items():
+
+        if val:
+            resultado = resultado[
+                resultado[col].astype(str).str.contains(val, case=False, na=False)
+            ]
+
+# 🔥 AGREGAR LINKS SOLO 2026
 if año == "2026":
 
-    resultado["LINK_FACTURA"] = resultado["FACTURA"].apply(
+    resultado["PDF_FACTURA"] = resultado["FACTURA"].apply(
         lambda x: generar_link(x, facturas_drive)
     )
 
-    resultado["LINK_PAGO"] = resultado["CLC"].apply(
+    resultado["PDF_PAGO"] = resultado["CLC"].apply(
         lambda x: generar_link(x, pagos_drive)
     )
 
+# ================= CONSUMO =================
+st.subheader("Consumo del contrato")
+
+m1, m2, m3 = calcular_consumo(st.session_state.contrato)
+
+a, b, c = st.columns(3)
+
+a.metric("Monto del contrato", formato_pesos(m1))
+b.metric("Monto ejercido", formato_pesos(m2))
+c.metric("Monto pendiente", formato_pesos(m3))
+
 # ================= TABLA =================
-st.subheader("Resultados")
+st.subheader("Tabla de Resultados")
 
 columnas = [
     "BENEFICIARIO",
     "NUM_CONTRATO",
+    "OFICIO_SOLICITUD",
     "CLC",
     "IMPORTE",
     "FACTURA",
-    "FECHA_PAGO"
+    "FECHA_PAGO",
 ]
 
 tabla = resultado[[c for c in columnas if c in resultado.columns]].copy()
 
-# FORMATO FECHA
+# 🔥 AGREGAR COLUMNAS NUEVAS
+if año == "2026":
+    tabla["📄 FACTURA (PDF)"] = resultado["PDF_FACTURA"]
+    tabla["💰 COMPROBACIÓN DE PAGO"] = resultado["PDF_PAGO"]
+
 if "FECHA_PAGO" in tabla.columns:
     tabla["FECHA_PAGO"] = pd.to_datetime(
-        tabla["FECHA_PAGO"], errors="coerce"
+        tabla["FECHA_PAGO"],
+        errors="coerce"
     ).dt.strftime("%d/%m/%Y")
 
-# TOTAL
-total = pd.to_numeric(tabla["IMPORTE"], errors="coerce").sum()
+# ================= TOTALES =================
+if "IMPORTE" in tabla.columns:
+    total_importe = pd.to_numeric(tabla["IMPORTE"], errors="coerce").sum()
+    tabla["IMPORTE"] = tabla["IMPORTE"].apply(formato_pesos)
+else:
+    total_importe = 0
+    st.warning("No se encontró la columna IMPORTE")
 
-tabla["IMPORTE"] = tabla["IMPORTE"].apply(formato_pesos)
+st.markdown("---")
 
-# 🔥 AGREGAR LINKS VISUALES
-if año == "2026":
+col_t1, col_t2 = st.columns([4, 1])
 
-    tabla["📄 FACTURA"] = resultado["LINK_FACTURA"].apply(
-        lambda x: crear_link_html(x, "Ver PDF")
-    )
+with col_t1:
+    st.markdown("### MONTO TOTAL DE PAGOS ENCONTRADOS")
 
-    tabla["💰 PAGO"] = resultado["LINK_PAGO"].apply(
-        lambda x: crear_link_html(x, "Ver PDF")
-    )
+with col_t2:
+    st.metric("", formato_pesos(total_importe))
 
-# ================= MOSTRAR =================
-st.metric("Total", formato_pesos(total))
+alto_tabla = min(420, (len(tabla) + 1) * 35)
 
-st.write(
-    tabla.to_html(escape=False, index=False),
-    unsafe_allow_html=True
-)
+st.dataframe(tabla, use_container_width=True, height=alto_tabla)
 
-# ================= DESCARGA =================
+# ================= EXPORTAR =================
+st.divider()
+
 st.download_button(
-    "Descargar Excel",
+    "Descargar resultados en Excel",
     convertir_excel(tabla),
-    file_name=f"pagos_{año}.xlsx"
+    file_name=f"resultados_pagos_{año}.xlsx"
 )
-
-
-
-
-
-
-
-
