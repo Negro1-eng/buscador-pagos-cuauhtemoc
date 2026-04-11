@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
 from io import BytesIO
 
 # ================= CONFIGURACIÓN =================
@@ -37,10 +36,6 @@ IDS_SHEETS = {
     "2025": "14D-Q2oyPZ1u8VbDgq5QorhUKPzz9pjtZQyRxwys5nmA",
     "2026": "1Dr6IlKOECZ-rgeXQ-4hfEgFEr1lucFc-6BuljR_S9r4"
 }
-
-# 🔥 IDS DE CARPETAS DRIVE
-FOLDER_FACTURAS = "1VNOrMmdZWalCykgRZSgsHNYlDFU6w6sP"
-FOLDER_PAGOS = "1E-MRmWlPBHzDRTHq89XgKFpHp_kRHcM"
 
 # ================= SELECTOR DE AÑO =================
 st.subheader("Seleccionar Año")
@@ -88,41 +83,14 @@ def cargar_datos(año):
     df_pagos = pd.DataFrame(sh.worksheet("PAGOS").get_all_records())
     df_comp = pd.DataFrame(sh.worksheet("COMPROMISOS").get_all_records())
 
+    # 🔥 SOLO NORMALIZAMOS (sin romper tu lógica)
     df_pagos.columns = df_pagos.columns.str.strip().str.upper()
     df_comp.columns = df_comp.columns.str.strip().str.upper()
 
     return df_pagos, df_comp
 
 
-# ================= GOOGLE DRIVE =================
-@st.cache_data
-def obtener_pdfs_drive():
-
-    scopes = ["https://www.googleapis.com/auth/drive.readonly"]
-
-    creds = Credentials.from_service_account_info(
-        st.secrets["google_service_account"],
-        scopes=scopes
-    )
-
-    service = build("drive", "v3", credentials=creds)
-
-    def listar(folder_id):
-        resultados = service.files().list(
-            q=f"'{folder_id}' in parents and mimeType='application/pdf'",
-            fields="files(id, name)"
-        ).execute()
-
-        return resultados.get("files", [])
-
-    return listar(FOLDER_FACTURAS), listar(FOLDER_PAGOS)
-
-
 df, df_comp = cargar_datos(año)
-
-# 🔥 SOLO PARA 2026
-if año == "2026":
-    facturas_drive, pagos_drive = obtener_pdfs_drive()
 
 # ================= LISTAS =================
 lista_beneficiarios = sorted(df["BENEFICIARIO"].dropna().astype(str).unique())
@@ -162,21 +130,6 @@ def convertir_excel(df):
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df.to_excel(writer, index=False)
     return output.getvalue()
-
-
-# 🔥 GENERAR LINK AUTOMÁTICO
-def generar_link(valor, archivos):
-    if pd.isna(valor):
-        return ""
-
-    valor = str(valor)
-
-    for archivo in archivos:
-        if valor in archivo["name"]:
-            return f"https://drive.google.com/file/d/{archivo['id']}/view"
-
-    return ""
-
 
 # ================= FILTROS =================
 st.subheader("Filtros")
@@ -238,17 +191,6 @@ else:
                 resultado[col].astype(str).str.contains(val, case=False, na=False)
             ]
 
-# 🔥 AGREGAR LINKS SOLO 2026
-if año == "2026":
-
-    resultado["PDF_FACTURA"] = resultado["FACTURA"].apply(
-        lambda x: generar_link(x, facturas_drive)
-    )
-
-    resultado["PDF_PAGO"] = resultado["CLC"].apply(
-        lambda x: generar_link(x, pagos_drive)
-    )
-
 # ================= CONSUMO =================
 st.subheader("Consumo del contrato")
 
@@ -268,17 +210,12 @@ columnas = [
     "NUM_CONTRATO",
     "OFICIO_SOLICITUD",
     "CLC",
-    "IMPORTE",
+    "IMPORTE",  # 🔥 corregido
     "FACTURA",
     "FECHA_PAGO",
 ]
 
 tabla = resultado[[c for c in columnas if c in resultado.columns]].copy()
-
-# 🔥 AGREGAR COLUMNAS NUEVAS
-if año == "2026":
-    tabla["📄 FACTURA (PDF)"] = resultado["PDF_FACTURA"]
-    tabla["💰 COMPROBACIÓN DE PAGO"] = resultado["PDF_PAGO"]
 
 if "FECHA_PAGO" in tabla.columns:
     tabla["FECHA_PAGO"] = pd.to_datetime(
@@ -286,7 +223,7 @@ if "FECHA_PAGO" in tabla.columns:
         errors="coerce"
     ).dt.strftime("%d/%m/%Y")
 
-# ================= TOTALES =================
+# 🔥 FIX DEL ERROR
 if "IMPORTE" in tabla.columns:
     total_importe = pd.to_numeric(tabla["IMPORTE"], errors="coerce").sum()
     tabla["IMPORTE"] = tabla["IMPORTE"].apply(formato_pesos)
