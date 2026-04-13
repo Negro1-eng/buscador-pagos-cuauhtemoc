@@ -2,7 +2,10 @@ import streamlit as st
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
 from io import BytesIO
+import os
+import re
 
 # ================= CONFIGURACIÓN =================
 st.set_page_config(
@@ -37,6 +40,19 @@ IDS_SHEETS = {
     "2026": "1Dr6IlKOECZ-rgeXQ-4hfEgFEr1lucFc-6BuljR_S9r4"
 }
 
+# ================= IDS DE CARPETAS DRIVE POR AÑO =================
+# PEGA AQUÍ LOS IDS DE TUS CARPETAS
+IDS_DRIVE = {
+    "2025": {
+        "comprobacion_pago": "PEGA_AQUI_ID_CARPETA_COMPROBACION_2025",
+        "factura": "PEGA_AQUI_ID_CARPETA_FACTURA_2025"
+    },
+    "2026": {
+        "comprobacion_pago": "1E-MRmWlPBHzDRTHq89XgKFpHp_kRHcMI",
+        "factura": "1VNOrMmdZWalCykgRZSgsHNYlDFU6w6sP"
+    }
+}
+
 # ================= SELECTOR DE AÑO =================
 st.subheader("Seleccionar Año")
 
@@ -65,11 +81,49 @@ with col1:
 for key in ["beneficiario", "clc", "contrato", "factura"]:
     st.session_state.setdefault(key, "")
 
+# ================= FUNCIONES AUXILIARES DRIVE =================
+def normalizar_nombre_archivo(valor):
+    if pd.isna(valor):
+        return ""
+    valor = str(valor).strip().lower()
+    valor = os.path.splitext(valor)[0]
+    valor = re.sub(r"\s+", " ", valor)
+    return valor
+
+def obtener_links_drive(service, folder_id):
+    links = {}
+    page_token = None
+
+    while True:
+        response = service.files().list(
+            q=f"'{folder_id}' in parents and mimeType='application/pdf' and trashed=false",
+            fields="nextPageToken, files(id, name)",
+            pageSize=1000,
+            pageToken=page_token
+        ).execute()
+
+        files = response.get("files", [])
+
+        for file in files:
+            nombre = file["name"]
+            file_id = file["id"]
+            clave = normalizar_nombre_archivo(nombre)
+            links[clave] = f"https://drive.google.com/file/d/{file_id}/view"
+
+        page_token = response.get("nextPageToken", None)
+        if page_token is None:
+            break
+
+    return links
+
 # ================= GOOGLE SHEETS =================
 @st.cache_data
 def cargar_datos(año):
 
-    scopes = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets.readonly",
+        "https://www.googleapis.com/auth/drive.readonly"
+    ]
 
     creds = Credentials.from_service_account_info(
         st.secrets["google_service_account"],
@@ -77,6 +131,7 @@ def cargar_datos(año):
     )
 
     client = gspread.authorize(creds)
+    service = build("drive", "v3", credentials=creds)
     sheet_id = IDS_SHEETS[año]
     sh = client.open_by_key(sheet_id)
 
@@ -86,6 +141,37 @@ def cargar_datos(año):
     # 🔥 SOLO NORMALIZAMOS (sin romper tu lógica)
     df_pagos.columns = df_pagos.columns.str.strip().str.upper()
     df_comp.columns = df_comp.columns.str.strip().str.upper()
+
+    # ================= DRIVE =================
+    carpeta_comprobacion = IDS_DRIVE[año]["comprobacion_pago"]
+    carpeta_factura = IDS_DRIVE[año]["factura"]
+
+    links_comprobacion = {}
+    links_factura = {}
+
+    if carpeta_comprobacion and "PEGA_AQUI" not in carpeta_comprobacion:
+        links_comprobacion = obtener_links_drive(service, carpeta_comprobacion)
+
+    if carpeta_factura and "PEGA_AQUI" not in carpeta_factura:
+        links_factura = obtener_links_drive(service, carpeta_factura)
+
+    if "COMPROBACION DE PAGO" in df_pagos.columns:
+        df_pagos["PDF COMPROBACION"] = (
+            df_pagos["COMPROBACION DE PAGO"]
+            .apply(normalizar_nombre_archivo)
+            .map(links_comprobacion)
+        )
+    else:
+        df_pagos["PDF COMPROBACION"] = None
+
+    if "FACTURA" in df_pagos.columns:
+        df_pagos["PDF FACTURA"] = (
+            df_pagos["FACTURA"]
+            .apply(normalizar_nombre_archivo)
+            .map(links_factura)
+        )
+    else:
+        df_pagos["PDF FACTURA"] = None
 
     return df_pagos, df_comp
 
@@ -210,8 +296,11 @@ columnas = [
     "NUM_CONTRATO",
     "OFICIO_SOLICITUD",
     "CLC",
-    "IMPORTE",  # 🔥 corregido
+    "COMPROBACION DE PAGO",
+    "PDF COMPROBACION",
+    "IMPORTE",
     "FACTURA",
+    "PDF FACTURA",
     "FECHA_PAGO",
 ]
 
@@ -243,7 +332,21 @@ with col_t2:
 
 alto_tabla = min(420, (len(tabla) + 1) * 35)
 
-st.dataframe(tabla, use_container_width=True, height=alto_tabla)
+st.dataframe(
+    tabla,
+    use_container_width=True,
+    height=alto_tabla,
+    column_config={
+        "PDF COMPROBACION": st.column_config.LinkColumn(
+            "PDF COMPROBACION",
+            display_text="Ver PDF"
+        ),
+        "PDF FACTURA": st.column_config.LinkColumn(
+            "PDF FACTURA",
+            display_text="Ver PDF"
+        )
+    }
+)
 
 # ================= EXPORTAR =================
 st.divider()
