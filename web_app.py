@@ -45,7 +45,7 @@ IDS_DRIVE = {
     "2025": {
         "comprobacion_pago": "PEGA_AQUI_ID_CARPETA_COMPROBACION_2025",
         "factura": "PEGA_AQUI_ID_CARPETA_FACTURA_2025",
-        "contrato": "PEGA_AQUI_ID_CARPETA_CONTRATOS_2025"
+        "contrato": "PEGA_AQUI_ID_CARPETA_PRINCIPAL_CONTRATOS_2025"
     },
     "2026": {
         "comprobacion_pago": "1E-MRmWlPBHzDRTHq89XgKFpHp_kRHcMI",
@@ -83,15 +83,16 @@ for key in ["beneficiario", "clc", "contrato", "factura"]:
     st.session_state.setdefault(key, "")
 
 # ================= FUNCIONES AUXILIARES DRIVE =================
-def normalizar_nombre_archivo(valor):
+def normalizar_nombre(valor):
     if pd.isna(valor):
         return ""
     valor = str(valor).strip().lower()
     valor = os.path.splitext(valor)[0]
+    valor = re.sub(r"[-_/\\.,]+", " ", valor)
     valor = re.sub(r"\s+", " ", valor)
     return valor
 
-def obtener_links_drive(service, folder_id):
+def obtener_links_drive_pdfs(service, folder_id):
     links = {}
     page_token = None
 
@@ -100,7 +101,9 @@ def obtener_links_drive(service, folder_id):
             q=f"'{folder_id}' in parents and mimeType='application/pdf' and trashed=false",
             fields="nextPageToken, files(id, name)",
             pageSize=1000,
-            pageToken=page_token
+            pageToken=page_token,
+            includeItemsFromAllDrives=True,
+            supportsAllDrives=True
         ).execute()
 
         files = response.get("files", [])
@@ -108,8 +111,36 @@ def obtener_links_drive(service, folder_id):
         for file in files:
             nombre = file["name"]
             file_id = file["id"]
-            clave = normalizar_nombre_archivo(nombre)
+            clave = normalizar_nombre(nombre)
             links[clave] = f"https://drive.google.com/file/d/{file_id}/view"
+
+        page_token = response.get("nextPageToken", None)
+        if page_token is None:
+            break
+
+    return links
+
+def obtener_links_carpetas_drive(service, folder_id):
+    links = {}
+    page_token = None
+
+    while True:
+        response = service.files().list(
+            q=f"'{folder_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false",
+            fields="nextPageToken, files(id, name)",
+            pageSize=1000,
+            pageToken=page_token,
+            includeItemsFromAllDrives=True,
+            supportsAllDrives=True
+        ).execute()
+
+        files = response.get("files", [])
+
+        for file in files:
+            nombre = file["name"]
+            file_id = file["id"]
+            clave = normalizar_nombre(nombre)
+            links[clave] = f"https://drive.google.com/drive/folders/{file_id}"
 
         page_token = response.get("nextPageToken", None)
         if page_token is None:
@@ -120,7 +151,6 @@ def obtener_links_drive(service, folder_id):
 # ================= GOOGLE SHEETS =================
 @st.cache_data
 def cargar_datos(año):
-
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets.readonly",
         "https://www.googleapis.com/auth/drive.readonly"
@@ -142,7 +172,6 @@ def cargar_datos(año):
     df_pagos.columns = df_pagos.columns.str.strip().str.upper()
     df_comp.columns = df_comp.columns.str.strip().str.upper()
 
-    # ================= DRIVE =================
     carpeta_comprobacion = IDS_DRIVE[año]["comprobacion_pago"]
     carpeta_factura = IDS_DRIVE[año]["factura"]
     carpeta_contrato = IDS_DRIVE[año]["contrato"]
@@ -152,18 +181,18 @@ def cargar_datos(año):
     links_contrato = {}
 
     if carpeta_comprobacion and "PEGA_AQUI" not in carpeta_comprobacion:
-        links_comprobacion = obtener_links_drive(service, carpeta_comprobacion)
+        links_comprobacion = obtener_links_drive_pdfs(service, carpeta_comprobacion)
 
     if carpeta_factura and "PEGA_AQUI" not in carpeta_factura:
-        links_factura = obtener_links_drive(service, carpeta_factura)
+        links_factura = obtener_links_drive_pdfs(service, carpeta_factura)
 
     if carpeta_contrato and "PEGA_AQUI" not in carpeta_contrato:
-        links_contrato = obtener_links_drive(service, carpeta_contrato)
+        links_contrato = obtener_links_carpetas_drive(service, carpeta_contrato)
 
     if "COMPROBACION DE PAGO" in df_pagos.columns:
         df_pagos["PDF COMPROBACION"] = (
             df_pagos["COMPROBACION DE PAGO"]
-            .apply(normalizar_nombre_archivo)
+            .apply(normalizar_nombre)
             .map(links_comprobacion)
         )
     else:
@@ -172,7 +201,7 @@ def cargar_datos(año):
     if "FACTURA" in df_pagos.columns:
         df_pagos["PDF FACTURA"] = (
             df_pagos["FACTURA"]
-            .apply(normalizar_nombre_archivo)
+            .apply(normalizar_nombre)
             .map(links_factura)
         )
     else:
@@ -181,14 +210,13 @@ def cargar_datos(año):
     if "NUM_CONTRATO" in df_pagos.columns:
         df_pagos["PDF CONTRATO"] = (
             df_pagos["NUM_CONTRATO"]
-            .apply(normalizar_nombre_archivo)
+            .apply(normalizar_nombre)
             .map(links_contrato)
         )
     else:
         df_pagos["PDF CONTRATO"] = None
 
     return df_pagos, df_comp
-
 
 df, df_comp = cargar_datos(año)
 
@@ -202,9 +230,7 @@ def formato_pesos(valor):
     except:
         return "$ 0.00"
 
-
 def calcular_consumo(contrato):
-
     if not contrato:
         return 0, 0, 0
 
@@ -224,20 +250,20 @@ def calcular_consumo(contrato):
 
     return monto_contrato, monto_ejercido, monto_contrato - monto_ejercido
 
-
 def convertir_excel(df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df.to_excel(writer, index=False)
     return output.getvalue()
 
-
 def obtener_link_contrato(contrato):
     if not contrato or "PDF CONTRATO" not in df.columns:
         return None
 
+    contrato_normalizado = normalizar_nombre(contrato)
+
     coincidencias = df.loc[
-        df["NUM_CONTRATO"].astype(str) == str(contrato),
+        df["NUM_CONTRATO"].apply(normalizar_nombre) == contrato_normalizado,
         "PDF CONTRATO"
     ].dropna()
 
@@ -258,14 +284,11 @@ with c1:
     )
 
 if st.session_state.beneficiario:
-
     contratos_filtrados = (
         df[df["BENEFICIARIO"] == st.session_state.beneficiario]["NUM_CONTRATO"]
         .dropna().astype(str).unique().tolist()
     )
-
 else:
-
     contratos_filtrados = df["NUM_CONTRATO"].dropna().astype(str).unique().tolist()
 
 with c2:
@@ -286,36 +309,43 @@ with c5:
             st.session_state[k] = ""
         st.rerun()
 
-# ================= BOTÓN PARA VER CONTRATO =================
-link_contrato = obtener_link_contrato(st.session_state.contrato)
-
-if st.session_state.contrato:
-    st.subheader("Contrato seleccionado")
-
-    if link_contrato:
-        st.link_button("Visualizar contrato", link_contrato)
-    else:
-        st.warning("No se encontró el PDF del contrato en la carpeta de Drive.")
-
 # ================= FILTRADO =================
 resultado = df.copy()
 
 if st.session_state.beneficiario and len(contratos_filtrados) > 1 and not st.session_state.contrato:
     resultado = resultado.iloc[0:0]
-
 else:
-
     for col, val in {
         "BENEFICIARIO": st.session_state.beneficiario,
         "CLC": st.session_state.clc,
         "NUM_CONTRATO": st.session_state.contrato,
         "FACTURA": st.session_state.factura
     }.items():
-
         if val:
             resultado = resultado[
                 resultado[col].astype(str).str.contains(val, case=False, na=False)
             ]
+
+# ================= BOTÓN PARA VER CONTRATO =================
+contrato_para_link = st.session_state.contrato
+
+if not contrato_para_link and not resultado.empty and "NUM_CONTRATO" in resultado.columns:
+    contratos_unicos = resultado["NUM_CONTRATO"].dropna().astype(str).unique().tolist()
+    if len(contratos_unicos) == 1:
+        contrato_para_link = contratos_unicos[0]
+
+link_contrato = obtener_link_contrato(contrato_para_link)
+
+if contrato_para_link:
+    st.subheader("Carpeta del contrato")
+
+    if link_contrato:
+        st.link_button("Visualizar carpeta del contrato", link_contrato)
+    else:
+        st.warning(
+            "No se encontró la carpeta del contrato en Drive. "
+            "Verifica que la subcarpeta tenga el mismo nombre que el NUM_CONTRATO."
+        )
 
 # ================= CONSUMO =================
 st.subheader("Consumo del contrato")
@@ -378,8 +408,8 @@ st.dataframe(
     height=alto_tabla,
     column_config={
         "PDF CONTRATO": st.column_config.LinkColumn(
-            "PDF CONTRATO",
-            display_text="Ver contrato"
+            "CARPETA CONTRATO",
+            display_text="Ver carpeta"
         ),
         "PDF COMPROBACION": st.column_config.LinkColumn(
             "PDF COMPROBACION",
