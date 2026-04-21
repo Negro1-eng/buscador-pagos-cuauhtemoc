@@ -41,15 +41,16 @@ IDS_SHEETS = {
 }
 
 # ================= IDS DE CARPETAS DRIVE POR AÑO =================
-# PEGA AQUÍ LOS IDS DE TUS CARPETAS
 IDS_DRIVE = {
     "2025": {
         "comprobacion_pago": "PEGA_AQUI_ID_CARPETA_COMPROBACION_2025",
-        "factura": "PEGA_AQUI_ID_CARPETA_FACTURA_2025"
+        "factura": "PEGA_AQUI_ID_CARPETA_FACTURA_2025",
+        "contrato": "PEGA_AQUI_ID_CARPETA_CONTRATOS_2025"
     },
     "2026": {
         "comprobacion_pago": "1E-MRmWlPBHzDRTHq89XgKFpHp_kRHcMI",
-        "factura": "1VNOrMmdZWalCykgRZSgsHNYlDFU6w6sP"
+        "factura": "1VNOrMmdZWalCykgRZSgsHNYlDFU6w6sP",
+        "contrato": "1-0UgXXPq6YzkrRiBxKPOESdhKtT5Eqd3"
     }
 }
 
@@ -138,22 +139,26 @@ def cargar_datos(año):
     df_pagos = pd.DataFrame(sh.worksheet("PAGOS").get_all_records())
     df_comp = pd.DataFrame(sh.worksheet("COMPROMISOS").get_all_records())
 
-    # 🔥 SOLO NORMALIZAMOS (sin romper tu lógica)
     df_pagos.columns = df_pagos.columns.str.strip().str.upper()
     df_comp.columns = df_comp.columns.str.strip().str.upper()
 
     # ================= DRIVE =================
     carpeta_comprobacion = IDS_DRIVE[año]["comprobacion_pago"]
     carpeta_factura = IDS_DRIVE[año]["factura"]
+    carpeta_contrato = IDS_DRIVE[año]["contrato"]
 
     links_comprobacion = {}
     links_factura = {}
+    links_contrato = {}
 
     if carpeta_comprobacion and "PEGA_AQUI" not in carpeta_comprobacion:
         links_comprobacion = obtener_links_drive(service, carpeta_comprobacion)
 
     if carpeta_factura and "PEGA_AQUI" not in carpeta_factura:
         links_factura = obtener_links_drive(service, carpeta_factura)
+
+    if carpeta_contrato and "PEGA_AQUI" not in carpeta_contrato:
+        links_contrato = obtener_links_drive(service, carpeta_contrato)
 
     if "COMPROBACION DE PAGO" in df_pagos.columns:
         df_pagos["PDF COMPROBACION"] = (
@@ -172,6 +177,15 @@ def cargar_datos(año):
         )
     else:
         df_pagos["PDF FACTURA"] = None
+
+    if "NUM_CONTRATO" in df_pagos.columns:
+        df_pagos["PDF CONTRATO"] = (
+            df_pagos["NUM_CONTRATO"]
+            .apply(normalizar_nombre_archivo)
+            .map(links_contrato)
+        )
+    else:
+        df_pagos["PDF CONTRATO"] = None
 
     return df_pagos, df_comp
 
@@ -217,6 +231,21 @@ def convertir_excel(df):
         df.to_excel(writer, index=False)
     return output.getvalue()
 
+
+def obtener_link_contrato(contrato):
+    if not contrato or "PDF CONTRATO" not in df.columns:
+        return None
+
+    coincidencias = df.loc[
+        df["NUM_CONTRATO"].astype(str) == str(contrato),
+        "PDF CONTRATO"
+    ].dropna()
+
+    if coincidencias.empty:
+        return None
+
+    return coincidencias.iloc[0]
+
 # ================= FILTROS =================
 st.subheader("Filtros")
 
@@ -257,6 +286,17 @@ with c5:
             st.session_state[k] = ""
         st.rerun()
 
+# ================= BOTÓN PARA VER CONTRATO =================
+link_contrato = obtener_link_contrato(st.session_state.contrato)
+
+if st.session_state.contrato:
+    st.subheader("Contrato seleccionado")
+
+    if link_contrato:
+        st.link_button("Visualizar contrato", link_contrato)
+    else:
+        st.warning("No se encontró el PDF del contrato en la carpeta de Drive.")
+
 # ================= FILTRADO =================
 resultado = df.copy()
 
@@ -294,6 +334,7 @@ st.subheader("Tabla de Resultados")
 columnas = [
     "BENEFICIARIO",
     "NUM_CONTRATO",
+    "PDF CONTRATO",
     "OFICIO_SOLICITUD",
     "CLC",
     "COMPROBACION DE PAGO",
@@ -312,7 +353,6 @@ if "FECHA_PAGO" in tabla.columns:
         errors="coerce"
     ).dt.strftime("%d/%m/%Y")
 
-# 🔥 FIX DEL ERROR
 if "IMPORTE" in tabla.columns:
     total_importe = pd.to_numeric(tabla["IMPORTE"], errors="coerce").sum()
     tabla["IMPORTE"] = tabla["IMPORTE"].apply(formato_pesos)
@@ -337,6 +377,10 @@ st.dataframe(
     use_container_width=True,
     height=alto_tabla,
     column_config={
+        "PDF CONTRATO": st.column_config.LinkColumn(
+            "PDF CONTRATO",
+            display_text="Ver contrato"
+        ),
         "PDF COMPROBACION": st.column_config.LinkColumn(
             "PDF COMPROBACION",
             display_text="Ver PDF"
